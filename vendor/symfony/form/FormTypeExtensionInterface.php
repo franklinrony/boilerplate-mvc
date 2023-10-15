@@ -11,7 +11,7 @@
 
 namespace Symfony\Component\Form;
 
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
@@ -24,6 +24,10 @@ interface FormTypeExtensionInterface
      * This method is called after the extended type has built the form to
      * further modify it.
      *
+     * @param array<string, mixed> $options
+     *
+     * @return void
+     *
      * @see FormTypeInterface::buildForm()
      */
     public function buildForm(FormBuilderInterface $builder, array $options);
@@ -33,6 +37,10 @@ interface FormTypeExtensionInterface
      *
      * This method is called after the extended type has built the view to
      * further modify it.
+     *
+     * @param array<string, mixed> $options
+     *
+     * @return void
      *
      * @see FormTypeInterface::buildView()
      */
@@ -44,25 +52,23 @@ interface FormTypeExtensionInterface
      * This method is called after the extended type has finished the view to
      * further modify it.
      *
+     * @param array<string, mixed> $options
+     *
+     * @return void
+     *
      * @see FormTypeInterface::finishView()
      */
     public function finishView(FormView $view, FormInterface $form, array $options);
 
     /**
-     * Overrides the default options from the extended type.
-     *
-     * @param OptionsResolverInterface $resolver The resolver for the options
-     *
-     * @deprecated since version 2.7, to be removed in 3.0.
-     *             Use the method configureOptions instead. This method will be
-     *             added to the FormTypeExtensionInterface with Symfony 3.0
+     * @return void
      */
-    public function setDefaultOptions(OptionsResolverInterface $resolver);
+    public function configureOptions(OptionsResolver $resolver);
 
     /**
-     * Returns the name of the type being extended.
+     * Gets the extended types.
      *
-     * @return string The name of the type being extended
+     * @return string[]
      */
-    public function getExtendedType();
+    public static function getExtendedTypes(): iterable;
 }

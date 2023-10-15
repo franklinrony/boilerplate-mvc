@@ -12,21 +12,26 @@
 namespace Symfony\Component\Form\Extension\Core\Type;
 
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class RadioType extends AbstractType
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
-    public function getParent()
+    public function configureOptions(OptionsResolver $resolver)
     {
-        return 'checkbox';
+        $resolver->setDefaults([
+            'invalid_message' => 'Please select a valid option.',
+        ]);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getParent(): ?string
+    {
+        return CheckboxType::class;
+    }
+
+    public function getBlockPrefix(): string
     {
         return 'radio';
     }

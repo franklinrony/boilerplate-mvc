@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,7 +16,9 @@
  */
 namespace Cake\Database\Log;
 
+use Cake\Log\Engine\BaseLog;
 use Cake\Log\Log;
+use Stringable;
 
 /**
  * This class is a bridge used to write LoggedQuery objects into a real log.
@@ -22,73 +26,36 @@ use Cake\Log\Log;
  *
  * @internal
  */
-class QueryLogger
+class QueryLogger extends BaseLog
 {
-
     /**
-     * Writes a LoggedQuery into a log
+     * Constructor.
      *
-     * @param \Cake\Database\Log\LoggedQuery $query to be written in log
-     * @return void
+     * @param array<string, mixed> $config Configuration array
      */
-    public function log(LoggedQuery $query)
+    public function __construct(array $config = [])
     {
-        if (!empty($query->params)) {
-            $query->query = $this->_interpolate($query);
-        }
-        $this->_log($query);
+        $this->_defaultConfig['scopes'] = ['queriesLog', 'cake.database.queries'];
+        $this->_defaultConfig['connection'] = '';
+
+        parent::__construct($config);
     }
 
     /**
-     * Wrapper function for the logger object, useful for unit testing
-     * or for overriding in subclasses.
-     *
-     * @param \Cake\Database\Log\LoggedQuery $query to be written in log
-     * @return void
+     * @inheritDoc
      */
-    protected function _log($query)
+    public function log($level, string|Stringable $message, array $context = []): void
     {
-        Log::write('debug', $query, ['queriesLog']);
-    }
+        $context += [
+            'scope' => $this->scopes() ?: ['queriesLog', 'cake.database.queries'],
+            'connection' => $this->getConfig('connection'),
+            'query' => null,
+        ];
 
-    /**
-     * Helper function used to replace query placeholders by the real
-     * params used to execute the query
-     *
-     * @param \Cake\Database\Log\LoggedQuery $query The query to log
-     * @return string
-     */
-    protected function _interpolate($query)
-    {
-        $params = array_map(function ($p) {
-            if ($p === null) {
-                return 'NULL';
-            }
-            if (is_bool($p)) {
-                return $p ? '1' : '0';
-            }
-
-            if (is_string($p)) {
-                $replacements = [
-                    '$' => '\\$',
-                    '\\' => '\\\\\\\\',
-                    "'" => "''",
-                ];
-
-                $p = strtr($p, $replacements);
-
-                return "'$p'";
-            }
-
-            return $p;
-        }, $query->params);
-
-        $keys = [];
-        $limit = is_int(key($params)) ? 1 : -1;
-        foreach ($params as $key => $param) {
-            $keys[] = is_string($key) ? "/:$key\b/" : '/[?]/';
+        if ($context['query'] instanceof LoggedQuery) {
+            $context = $context['query']->getContext() + $context;
+            $message = 'connection={connection} role={role} duration={took} rows={numRows} ' . $message;
         }
-
-        return preg_replace($keys, $params, $query->query, $limit);
+        Log::write('debug', (string)$message, $context);
     }
 }

@@ -19,13 +19,13 @@ class ConstraintWithValueAsDefault extends Constraint
     public $property;
     public $value;
 
-    public function getDefaultOption()
+    public function getDefaultOption(): ?string
     {
         return 'value';
     }
 
-    public function getTargets()
+    public function getTargets(): string|array
     {
-        return array(self::PROPERTY_CONSTRAINT, self::CLASS_CONSTRAINT);
+        return [self::PROPERTY_CONSTRAINT, self::CLASS_CONSTRAINT];
     }
 }

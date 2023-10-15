@@ -12,55 +12,47 @@
 namespace Symfony\Component\Security\Core\Tests\Authorization\Voter;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\ExpressionLanguage\Expression;
+use Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolverInterface;
+use Symfony\Component\Security\Core\Authentication\Token\AbstractToken;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Authorization\ExpressionLanguage;
 use Symfony\Component\Security\Core\Authorization\Voter\ExpressionVoter;
 use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
-use Symfony\Component\Security\Core\Role\Role;
 
 class ExpressionVoterTest extends TestCase
 {
-    public function testSupportsAttribute()
-    {
-        $expression = $this->createExpression();
-        $expressionLanguage = $this->getMockBuilder('Symfony\Component\Security\Core\Authorization\ExpressionLanguage')->getMock();
-        $voter = new ExpressionVoter($expressionLanguage, $this->createTrustResolver(), $this->createRoleHierarchy());
-
-        $this->assertTrue($voter->supportsAttribute($expression));
-    }
-
     /**
      * @dataProvider getVoteTests
      */
-    public function testVote($roles, $attributes, $expected, $tokenExpectsGetRoles = true, $expressionLanguageExpectsEvaluate = true)
+    public function testVoteWithTokenThatReturnsRoleNames($roles, $attributes, $expected, $tokenExpectsGetRoles = true, $expressionLanguageExpectsEvaluate = true)
     {
-        $voter = new ExpressionVoter($this->createExpressionLanguage($expressionLanguageExpectsEvaluate), $this->createTrustResolver());
+        $voter = new ExpressionVoter($this->createExpressionLanguage($expressionLanguageExpectsEvaluate), $this->createTrustResolver(), $this->createAuthorizationChecker());
 
-        $this->assertSame($expected, $voter->vote($this->getToken($roles, $tokenExpectsGetRoles), null, $attributes));
+        $this->assertSame($expected, $voter->vote($this->getTokenWithRoleNames($roles, $tokenExpectsGetRoles), null, $attributes));
     }
 
-    public function getVoteTests()
+    public static function getVoteTests()
     {
-        return array(
-            array(array(), array(), VoterInterface::ACCESS_ABSTAIN, false, false),
-            array(array(), array('FOO'), VoterInterface::ACCESS_ABSTAIN, false, false),
+        return [
+            [[], [], VoterInterface::ACCESS_ABSTAIN, false, false],
+            [[], ['FOO'], VoterInterface::ACCESS_ABSTAIN, false, false],
 
-            array(array(), array($this->createExpression()), VoterInterface::ACCESS_DENIED, true, false),
+            [[], [self::createExpression()], VoterInterface::ACCESS_DENIED, true, false],
 
-            array(array('ROLE_FOO'), array($this->createExpression(), $this->createExpression()), VoterInterface::ACCESS_GRANTED),
-            array(array('ROLE_BAR', 'ROLE_FOO'), array($this->createExpression()), VoterInterface::ACCESS_GRANTED),
-        );
+            [['ROLE_FOO'], [self::createExpression(), self::createExpression()], VoterInterface::ACCESS_GRANTED],
+            [['ROLE_BAR', 'ROLE_FOO'], [self::createExpression()], VoterInterface::ACCESS_GRANTED],
+        ];
     }
 
-    protected function getToken(array $roles, $tokenExpectsGetRoles = true)
+    protected function getTokenWithRoleNames(array $roles, $tokenExpectsGetRoles = true)
     {
-        foreach ($roles as $i => $role) {
-            $roles[$i] = new Role($role);
-        }
-        $token = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
+        $token = $this->createMock(AbstractToken::class);
 
         if ($tokenExpectsGetRoles) {
             $token->expects($this->once())
-                ->method('getRoles')
-                ->will($this->returnValue($roles));
+                ->method('getRoleNames')
+                ->willReturn($roles);
         }
 
         return $token;
@@ -68,12 +60,12 @@ class ExpressionVoterTest extends TestCase
 
     protected function createExpressionLanguage($expressionLanguageExpectsEvaluate = true)
     {
-        $mock = $this->getMockBuilder('Symfony\Component\Security\Core\Authorization\ExpressionLanguage')->getMock();
+        $mock = $this->createMock(ExpressionLanguage::class);
 
         if ($expressionLanguageExpectsEvaluate) {
             $mock->expects($this->once())
                 ->method('evaluate')
-                ->will($this->returnValue(true));
+                ->willReturn(true);
         }
 
         return $mock;
@@ -81,18 +73,16 @@ class ExpressionVoterTest extends TestCase
 
     protected function createTrustResolver()
     {
-        return $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolverInterface')->getMock();
+        return $this->createMock(AuthenticationTrustResolverInterface::class);
     }
 
-    protected function createRoleHierarchy()
+    protected function createAuthorizationChecker()
     {
-        return $this->getMockBuilder('Symfony\Component\Security\Core\Role\RoleHierarchyInterface')->getMock();
+        return $this->createMock(AuthorizationCheckerInterface::class);
     }
 
-    protected function createExpression()
+    protected static function createExpression()
     {
-        return $this->getMockBuilder('Symfony\Component\ExpressionLanguage\Expression')
-            ->disableOriginalConstructor()
-            ->getMock();
+        return new Expression('');
     }
 }

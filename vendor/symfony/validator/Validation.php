@@ -11,6 +11,9 @@
 
 namespace Symfony\Component\Validator;
 
+use Symfony\Component\Validator\Exception\ValidationFailedException;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+
 /**
  * Entry point for the Validator component.
  *
@@ -19,42 +22,59 @@ namespace Symfony\Component\Validator;
 final class Validation
 {
     /**
-     * The Validator API provided by Symfony 2.4 and older.
+     * Creates a callable chain of constraints.
+     */
+    public static function createCallable(Constraint|ValidatorInterface $constraintOrValidator = null, Constraint ...$constraints): callable
+    {
+        $validator = self::createIsValidCallable($constraintOrValidator, ...$constraints);
+
+        return static function ($value) use ($validator) {
+            if (!$validator($value, $violations)) {
+                throw new ValidationFailedException($value, $violations);
+            }
+
+            return $value;
+        };
+    }
+
+    /**
+     * Creates a callable that returns true/false instead of throwing validation exceptions.
      *
-     * @deprecated use API_VERSION_2_5_BC instead
+     * @return callable(mixed $value, ConstraintViolationListInterface &$violations = null): bool
      */
-    const API_VERSION_2_4 = 1;
+    public static function createIsValidCallable(Constraint|ValidatorInterface $constraintOrValidator = null, Constraint ...$constraints): callable
+    {
+        $validator = $constraintOrValidator;
 
-    /**
-     * The Validator API provided by Symfony 2.5 and newer.
-     */
-    const API_VERSION_2_5 = 2;
+        if ($constraintOrValidator instanceof Constraint) {
+            $constraints = \func_get_args();
+            $validator = null;
+        }
 
-    /**
-     * The Validator API provided by Symfony 2.5 and newer with a backwards
-     * compatibility layer for 2.4 and older.
-     */
-    const API_VERSION_2_5_BC = 3;
+        $validator ??= self::createValidator();
+
+        return static function (mixed $value, ConstraintViolationListInterface &$violations = null) use ($constraints, $validator): bool {
+            $violations = $validator->validate($value, $constraints);
+
+            return 0 === $violations->count();
+        };
+    }
 
     /**
      * Creates a new validator.
      *
      * If you want to configure the validator, use
      * {@link createValidatorBuilder()} instead.
-     *
-     * @return ValidatorInterface The new validator
      */
-    public static function createValidator()
+    public static function createValidator(): ValidatorInterface
     {
         return self::createValidatorBuilder()->getValidator();
     }
 
     /**
      * Creates a configurable builder for validator objects.
-     *
-     * @return ValidatorBuilderInterface The new builder
      */
-    public static function createValidatorBuilder()
+    public static function createValidatorBuilder(): ValidatorBuilder
     {
         return new ValidatorBuilder();
     }

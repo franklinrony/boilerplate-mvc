@@ -1,33 +1,15 @@
 <?php
+declare(strict_types=1);
+
 /**
- * Phinx
- *
- * (The MIT license)
- * Copyright (c) 2017 Cake Software Foundation
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated * documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- * @package    Phinx
- * @subpackage Phinx\Db\Adapter
+ * MIT License
+ * For full license information, please view the LICENSE file that was distributed with this source code.
  */
+
 namespace Phinx\Db\Adapter;
 
+use Exception;
+use InvalidArgumentException;
 use Phinx\Db\Table;
 use Phinx\Db\Table\Column;
 use Phinx\Util\Literal;
@@ -41,33 +23,43 @@ use Symfony\Component\Console\Output\OutputInterface;
 abstract class AbstractAdapter implements AdapterInterface
 {
     /**
-     * @var array
+     * @var array<string, mixed>
      */
-    protected $options = [];
+    protected array $options = [];
 
     /**
-     * @var \Symfony\Component\Console\Input\InputInterface
+     * @var \Symfony\Component\Console\Input\InputInterface|null
      */
-    protected $input;
+    protected ?InputInterface $input = null;
 
     /**
      * @var \Symfony\Component\Console\Output\OutputInterface
      */
-    protected $output;
+    protected OutputInterface $output;
+
+    /**
+     * @var string[]
+     */
+    protected array $createdTables = [];
 
     /**
      * @var string
      */
-    protected $schemaTableName = 'phinxlog';
+    protected string $schemaTableName = 'phinxlog';
+
+    /**
+     * @var array
+     */
+    protected array $dataDomain = [];
 
     /**
      * Class Constructor.
      *
-     * @param array $options Options
-     * @param \Symfony\Component\Console\Input\InputInterface $input Input Interface
-     * @param \Symfony\Component\Console\Output\OutputInterface  $output Output Interface
+     * @param array<string, mixed> $options Options
+     * @param \Symfony\Component\Console\Input\InputInterface|null $input Input Interface
+     * @param \Symfony\Component\Console\Output\OutputInterface|null $output Output Interface
      */
-    public function __construct(array $options, InputInterface $input = null, OutputInterface $output = null)
+    public function __construct(array $options, ?InputInterface $input = null, ?OutputInterface $output = null)
     {
         $this->setOptions($options);
         if ($input !== null) {
@@ -79,39 +71,50 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function setOptions(array $options)
+    public function setOptions(array $options): AdapterInterface
     {
         $this->options = $options;
 
         if (isset($options['default_migration_table'])) {
-            $this->setSchemaTableName($options['default_migration_table']);
+            trigger_error('The default_migration_table setting for adapter has been deprecated since 0.13.0. Use `migration_table` instead.', E_USER_DEPRECATED);
+            if (!isset($options['migration_table'])) {
+                $options['migration_table'] = $options['default_migration_table'];
+            }
+        }
+
+        if (isset($options['migration_table'])) {
+            $this->setSchemaTableName($options['migration_table']);
+        }
+
+        if (isset($options['data_domain'])) {
+            $this->setDataDomain($options['data_domain']);
         }
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getOptions()
+    public function getOptions(): array
     {
         return $this->options;
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function hasOption($name)
+    public function hasOption(string $name): bool
     {
         return isset($this->options[$name]);
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getOption($name)
+    public function getOption(string $name): mixed
     {
         if (!$this->hasOption($name)) {
             return null;
@@ -121,9 +124,9 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function setInput(InputInterface $input)
+    public function setInput(InputInterface $input): AdapterInterface
     {
         $this->input = $input;
 
@@ -131,17 +134,17 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getInput()
+    public function getInput(): ?InputInterface
     {
         return $this->input;
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function setOutput(OutputInterface $output)
+    public function setOutput(OutputInterface $output): AdapterInterface
     {
         $this->output = $output;
 
@@ -149,11 +152,11 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getOutput()
+    public function getOutput(): OutputInterface
     {
-        if ($this->output === null) {
+        if (!isset($this->output)) {
             $output = new NullOutput();
             $this->setOutput($output);
         }
@@ -162,11 +165,10 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
-     *
-     * @return array
+     * @inheritDoc
+     * @return array<int>
      */
-    public function getVersions()
+    public function getVersions(): array
     {
         $rows = $this->getVersionLog();
 
@@ -178,7 +180,7 @@ abstract class AbstractAdapter implements AdapterInterface
      *
      * @return string
      */
-    public function getSchemaTableName()
+    public function getSchemaTableName(): string
     {
         return $this->schemaTableName;
     }
@@ -189,7 +191,7 @@ abstract class AbstractAdapter implements AdapterInterface
      * @param string $schemaTableName Schema Table Name
      * @return $this
      */
-    public function setSchemaTableName($schemaTableName)
+    public function setSchemaTableName(string $schemaTableName)
     {
         $this->schemaTableName = $schemaTableName;
 
@@ -197,54 +199,144 @@ abstract class AbstractAdapter implements AdapterInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Gets the data domain.
+     *
+     * @return array
      */
-    public function hasSchemaTable()
+    public function getDataDomain(): array
     {
-        return $this->hasTable($this->getSchemaTableName());
+        return $this->dataDomain;
     }
 
     /**
-     * {@inheritdoc}
+     * Sets the data domain.
+     *
+     * @param array $dataDomain Array for the data domain
+     * @return $this
      */
-    public function createSchemaTable()
+    public function setDataDomain(array $dataDomain)
+    {
+        $this->dataDomain = [];
+
+        // Iterate over data domain field definitions and perform initial and
+        // simple normalization. We make sure the definition as a base 'type'
+        // and it is compatible with the base Phinx types.
+        foreach ($dataDomain as $type => $options) {
+            if (!isset($options['type'])) {
+                throw new InvalidArgumentException(sprintf(
+                    'You must specify a type for data domain type "%s".',
+                    $type
+                ));
+            }
+
+            // Replace type if it's the name of a Phinx constant
+            if (defined('static::' . $options['type'])) {
+                $options['type'] = constant('static::' . $options['type']);
+            }
+
+            if (!in_array($options['type'], $this->getColumnTypes(), true)) {
+                throw new InvalidArgumentException(sprintf(
+                    'An invalid column type "%s" was specified for data domain type "%s".',
+                    $options['type'],
+                    $type
+                ));
+            }
+
+            $internal_type = $options['type'];
+            unset($options['type']);
+
+            // Do a simple replacement for the 'length' / 'limit' option and
+            // detect hinting values for 'limit'.
+            if (isset($options['length'])) {
+                $options['limit'] = $options['length'];
+                unset($options['length']);
+            }
+
+            if (isset($options['limit']) && !is_numeric($options['limit'])) {
+                if (!defined('static::' . $options['limit'])) {
+                    throw new InvalidArgumentException(sprintf(
+                        'An invalid limit value "%s" was specified for data domain type "%s".',
+                        $options['limit'],
+                        $type
+                    ));
+                }
+
+                $options['limit'] = constant('static::' . $options['limit']);
+            }
+
+            // Save the data domain types in a more suitable format
+            $this->dataDomain[$type] = [
+                'type' => $internal_type,
+                'options' => $options,
+            ];
+        }
+
+        return $this;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getColumnForType(string $columnName, string $type, array $options): Column
+    {
+        $column = new Column();
+        $column->setName($columnName);
+
+        if (array_key_exists($type, $this->getDataDomain())) {
+            $column->setType($this->dataDomain[$type]['type']);
+            $column->setOptions($this->dataDomain[$type]['options']);
+        } else {
+            $column->setType($type);
+        }
+
+        $column->setOptions($options);
+
+        return $column;
+    }
+
+    /**
+     * @inheritDoc
+     * @throws \InvalidArgumentException
+     * @return void
+     */
+    public function createSchemaTable(): void
     {
         try {
             $options = [
                 'id' => false,
-                'primary_key' => 'version'
+                'primary_key' => 'version',
             ];
 
             $table = new Table($this->getSchemaTableName(), $options, $this);
-            $table->addColumn('version', 'biginteger')
+            $table->addColumn('version', 'biginteger', ['null' => false])
                 ->addColumn('migration_name', 'string', ['limit' => 100, 'default' => null, 'null' => true])
                 ->addColumn('start_time', 'timestamp', ['default' => null, 'null' => true])
                 ->addColumn('end_time', 'timestamp', ['default' => null, 'null' => true])
-                ->addColumn('breakpoint', 'boolean', ['default' => false])
+                ->addColumn('breakpoint', 'boolean', ['default' => false, 'null' => false])
                 ->save();
-        } catch (\Exception $exception) {
-            throw new \InvalidArgumentException(
+        } catch (Exception $exception) {
+            throw new InvalidArgumentException(
                 'There was a problem creating the schema table: ' . $exception->getMessage(),
-                intval($exception->getCode()),
+                (int)$exception->getCode(),
                 $exception
             );
         }
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getAdapterType()
+    public function getAdapterType(): string
     {
         return $this->getOption('adapter');
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function isValidColumnType(Column $column)
+    public function isValidColumnType(Column $column): bool
     {
-        return $column->getType() instanceof Literal || in_array($column->getType(), $this->getColumnTypes());
+        return $column->getType() instanceof Literal || in_array($column->getType(), $this->getColumnTypes(), true);
     }
 
     /**
@@ -252,10 +344,70 @@ abstract class AbstractAdapter implements AdapterInterface
      *
      * @return bool
      */
-    public function isDryRunEnabled()
+    public function isDryRunEnabled(): bool
     {
+        /** @var \Symfony\Component\Console\Input\InputInterface|null $input */
         $input = $this->getInput();
 
-        return ($input && $input->hasOption('dry-run')) ? $input->getOption('dry-run') : false;
+        return $input && $input->hasOption('dry-run') ? (bool)$input->getOption('dry-run') : false;
+    }
+
+    /**
+     * Adds user-created tables (e.g. not phinxlog) to a cached list
+     *
+     * @param string $tableName The name of the table
+     * @return void
+     */
+    protected function addCreatedTable(string $tableName): void
+    {
+        $tableName = $this->quoteTableName($tableName);
+        if (substr_compare($tableName, 'phinxlog', -strlen('phinxlog')) !== 0) {
+            $this->createdTables[] = $tableName;
+        }
+    }
+
+    /**
+     * Updates the name of the cached table
+     *
+     * @param string $tableName Original name of the table
+     * @param string $newTableName New name of the table
+     * @return void
+     */
+    protected function updateCreatedTableName(string $tableName, string $newTableName): void
+    {
+        $tableName = $this->quoteTableName($tableName);
+        $newTableName = $this->quoteTableName($newTableName);
+        $key = array_search($tableName, $this->createdTables, true);
+        if ($key !== false) {
+            $this->createdTables[$key] = $newTableName;
+        }
+    }
+
+    /**
+     * Removes table from the cached created list
+     *
+     * @param string $tableName The name of the table
+     * @return void
+     */
+    protected function removeCreatedTable(string $tableName): void
+    {
+        $tableName = $this->quoteTableName($tableName);
+        $key = array_search($tableName, $this->createdTables, true);
+        if ($key !== false) {
+            unset($this->createdTables[$key]);
+        }
+    }
+
+    /**
+     * Check if the table is in the cached list of created tables
+     *
+     * @param string $tableName The name of the table
+     * @return bool
+     */
+    protected function hasCreatedTable(string $tableName): bool
+    {
+        $tableName = $this->quoteTableName($tableName);
+
+        return in_array($tableName, $this->createdTables, true);
     }
 }

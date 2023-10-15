@@ -13,10 +13,11 @@ namespace Symfony\Bridge\Twig;
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\SecurityContext;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Translation\LocaleSwitcher;
 
 /**
  * Exposes some Symfony parameters and services as an "app" global variable.
@@ -25,102 +26,84 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  */
 class AppVariable
 {
-    private $container;
-    private $tokenStorage;
-    private $requestStack;
-    private $environment;
-    private $debug;
+    private TokenStorageInterface $tokenStorage;
+    private RequestStack $requestStack;
+    private string $environment;
+    private bool $debug;
+    private LocaleSwitcher $localeSwitcher;
 
     /**
-     * @deprecated since version 2.7, to be removed in 3.0.
+     * @return void
      */
-    public function setContainer(ContainerInterface $container)
-    {
-        $this->container = $container;
-    }
-
     public function setTokenStorage(TokenStorageInterface $tokenStorage)
     {
         $this->tokenStorage = $tokenStorage;
     }
 
+    /**
+     * @return void
+     */
     public function setRequestStack(RequestStack $requestStack)
     {
         $this->requestStack = $requestStack;
     }
 
-    public function setEnvironment($environment)
+    /**
+     * @return void
+     */
+    public function setEnvironment(string $environment)
     {
         $this->environment = $environment;
     }
 
-    public function setDebug($debug)
+    /**
+     * @return void
+     */
+    public function setDebug(bool $debug)
     {
-        $this->debug = (bool) $debug;
+        $this->debug = $debug;
+    }
+
+    public function setLocaleSwitcher(LocaleSwitcher $localeSwitcher): void
+    {
+        $this->localeSwitcher = $localeSwitcher;
     }
 
     /**
-     * Returns the security context service.
+     * Returns the current token.
      *
-     * @deprecated since version 2.6, to be removed in 3.0.
-     *
-     * @return SecurityContext|null The security context
+     * @throws \RuntimeException When the TokenStorage is not available
      */
-    public function getSecurity()
+    public function getToken(): ?TokenInterface
     {
-        @trigger_error('The "app.security" variable is deprecated since Symfony 2.6 and will be removed in 3.0.', E_USER_DEPRECATED);
-
-        if (null === $this->container) {
-            throw new \RuntimeException('The "app.security" variable is not available.');
+        if (!isset($this->tokenStorage)) {
+            throw new \RuntimeException('The "app.token" variable is not available.');
         }
 
-        if ($this->container->has('security.context')) {
-            return $this->container->get('security.context');
-        }
+        return $this->tokenStorage->getToken();
     }
 
     /**
      * Returns the current user.
      *
-     * @return mixed
-     *
      * @see TokenInterface::getUser()
      */
-    public function getUser()
+    public function getUser(): ?UserInterface
     {
-        if (null === $this->tokenStorage) {
-            if (null === $this->container) {
-                throw new \RuntimeException('The "app.user" variable is not available.');
-            } elseif (!$this->container->has('security.context')) {
-                return;
-            }
-
-            $this->tokenStorage = $this->container->get('security.context');
+        if (!isset($this->tokenStorage)) {
+            throw new \RuntimeException('The "app.user" variable is not available.');
         }
 
-        if (!$token = $this->tokenStorage->getToken()) {
-            return;
-        }
-
-        $user = $token->getUser();
-        if (is_object($user)) {
-            return $user;
-        }
+        return $this->tokenStorage->getToken()?->getUser();
     }
 
     /**
      * Returns the current request.
-     *
-     * @return Request|null The HTTP request object
      */
-    public function getRequest()
+    public function getRequest(): ?Request
     {
-        if (null === $this->requestStack) {
-            if (null === $this->container) {
-                throw new \RuntimeException('The "app.request" variable is not available.');
-            }
-
-            $this->requestStack = $this->container->get('request_stack');
+        if (!isset($this->requestStack)) {
+            throw new \RuntimeException('The "app.request" variable is not available.');
         }
 
         return $this->requestStack->getCurrentRequest();
@@ -128,28 +111,23 @@ class AppVariable
 
     /**
      * Returns the current session.
-     *
-     * @return Session|null The session
      */
-    public function getSession()
+    public function getSession(): ?SessionInterface
     {
-        if (null === $this->requestStack && null === $this->container) {
+        if (!isset($this->requestStack)) {
             throw new \RuntimeException('The "app.session" variable is not available.');
         }
+        $request = $this->getRequest();
 
-        if ($request = $this->getRequest()) {
-            return $request->getSession();
-        }
+        return $request?->hasSession() ? $request->getSession() : null;
     }
 
     /**
      * Returns the current app environment.
-     *
-     * @return string The current environment string (e.g 'dev')
      */
-    public function getEnvironment()
+    public function getEnvironment(): string
     {
-        if (null === $this->environment) {
+        if (!isset($this->environment)) {
             throw new \RuntimeException('The "app.environment" variable is not available.');
         }
 
@@ -158,15 +136,81 @@ class AppVariable
 
     /**
      * Returns the current app debug mode.
-     *
-     * @return bool The current debug mode
      */
-    public function getDebug()
+    public function getDebug(): bool
     {
-        if (null === $this->debug) {
+        if (!isset($this->debug)) {
             throw new \RuntimeException('The "app.debug" variable is not available.');
         }
 
         return $this->debug;
+    }
+
+    public function getLocale(): string
+    {
+        if (!isset($this->localeSwitcher)) {
+            throw new \RuntimeException('The "app.locale" variable is not available.');
+        }
+
+        return $this->localeSwitcher->getLocale();
+    }
+
+    /**
+     * Returns some or all the existing flash messages:
+     *  * getFlashes() returns all the flash messages
+     *  * getFlashes('notice') returns a simple array with flash messages of that type
+     *  * getFlashes(['notice', 'error']) returns a nested array of type => messages.
+     */
+    public function getFlashes(string|array $types = null): array
+    {
+        try {
+            if (null === $session = $this->getSession()) {
+                return [];
+            }
+        } catch (\RuntimeException) {
+            return [];
+        }
+
+        // In 7.0 (when symfony/http-foundation: 6.4 is required) this can be updated to
+        // check if the session is an instance of FlashBagAwareSessionInterface
+        if (!method_exists($session, 'getFlashBag')) {
+            return [];
+        }
+
+        if (null === $types || '' === $types || [] === $types) {
+            return $session->getFlashBag()->all();
+        }
+
+        if (\is_string($types)) {
+            return $session->getFlashBag()->get($types);
+        }
+
+        $result = [];
+        foreach ($types as $type) {
+            $result[$type] = $session->getFlashBag()->get($type);
+        }
+
+        return $result;
+    }
+
+    public function getCurrent_route(): ?string
+    {
+        if (!isset($this->requestStack)) {
+            throw new \RuntimeException('The "app.current_route" variable is not available.');
+        }
+
+        return $this->getRequest()?->attributes->get('_route');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getCurrent_route_parameters(): array
+    {
+        if (!isset($this->requestStack)) {
+            throw new \RuntimeException('The "app.current_route_parameters" variable is not available.');
+        }
+
+        return $this->getRequest()?->attributes->get('_route_params') ?? [];
     }
 }

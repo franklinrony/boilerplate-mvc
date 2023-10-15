@@ -12,66 +12,34 @@
 namespace Symfony\Component\Security\Core\Tests\Authorization;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Security\Core\Authentication\Token\NullToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
+use Symfony\Component\Security\Core\Authorization\AccessDecisionManagerInterface;
 use Symfony\Component\Security\Core\Authorization\AuthorizationChecker;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 
 class AuthorizationCheckerTest extends TestCase
 {
-    private $authenticationManager;
     private $accessDecisionManager;
     private $authorizationChecker;
     private $tokenStorage;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->authenticationManager = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\AuthenticationManagerInterface')->getMock();
-        $this->accessDecisionManager = $this->getMockBuilder('Symfony\Component\Security\Core\Authorization\AccessDecisionManagerInterface')->getMock();
+        $this->accessDecisionManager = $this->createMock(AccessDecisionManagerInterface::class);
         $this->tokenStorage = new TokenStorage();
 
-        $this->authorizationChecker = new AuthorizationChecker(
-            $this->tokenStorage,
-            $this->authenticationManager,
-            $this->accessDecisionManager
-        );
+        $this->authorizationChecker = new AuthorizationChecker($this->tokenStorage, $this->accessDecisionManager);
     }
 
-    public function testVoteAuthenticatesTokenIfNecessary()
-    {
-        $token = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
-        $this->tokenStorage->setToken($token);
-
-        $newToken = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
-
-        $this->authenticationManager
-            ->expects($this->once())
-            ->method('authenticate')
-            ->with($this->equalTo($token))
-            ->will($this->returnValue($newToken));
-
-        // default with() isn't a strict check
-        $tokenComparison = function ($value) use ($newToken) {
-            // make sure that the new token is used in "decide()" and not the old one
-            return $value === $newToken;
-        };
-
-        $this->accessDecisionManager
-            ->expects($this->once())
-            ->method('decide')
-            ->with($this->callback($tokenComparison))
-            ->will($this->returnValue(true));
-
-        // first run the token has not been re-authenticated yet, after isGranted is called, it should be equal
-        $this->assertNotSame($newToken, $this->tokenStorage->getToken());
-        $this->assertTrue($this->authorizationChecker->isGranted('foo'));
-        $this->assertSame($newToken, $this->tokenStorage->getToken());
-    }
-
-    /**
-     * @expectedException \Symfony\Component\Security\Core\Exception\AuthenticationCredentialsNotFoundException
-     */
     public function testVoteWithoutAuthenticationToken()
     {
-        $this->authorizationChecker->isGranted('ROLE_FOO');
+        $authorizationChecker = new AuthorizationChecker($this->tokenStorage, $this->accessDecisionManager);
+
+        $this->accessDecisionManager->expects($this->once())->method('decide')->with($this->isInstanceOf(NullToken::class))->willReturn(false);
+
+        $authorizationChecker->isGranted('ROLE_FOO');
     }
 
     /**
@@ -79,22 +47,33 @@ class AuthorizationCheckerTest extends TestCase
      */
     public function testIsGranted($decide)
     {
-        $token = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
-        $token
-            ->expects($this->once())
-            ->method('isAuthenticated')
-            ->will($this->returnValue(true));
+        $token = new UsernamePasswordToken(new InMemoryUser('username', 'password', ['ROLE_USER']), 'provider', ['ROLE_USER']);
 
         $this->accessDecisionManager
             ->expects($this->once())
             ->method('decide')
-            ->will($this->returnValue($decide));
+            ->willReturn($decide);
         $this->tokenStorage->setToken($token);
         $this->assertSame($decide, $this->authorizationChecker->isGranted('ROLE_FOO'));
     }
 
-    public function isGrantedProvider()
+    public static function isGrantedProvider()
     {
-        return array(array(true), array(false));
+        return [[true], [false]];
+    }
+
+    public function testIsGrantedWithObjectAttribute()
+    {
+        $attribute = new \stdClass();
+
+        $token = new UsernamePasswordToken(new InMemoryUser('username', 'password', ['ROLE_USER']), 'provider', ['ROLE_USER']);
+
+        $this->accessDecisionManager
+            ->expects($this->once())
+            ->method('decide')
+            ->with($this->identicalTo($token), $this->identicalTo([$attribute]))
+            ->willReturn(true);
+        $this->tokenStorage->setToken($token);
+        $this->assertTrue($this->authorizationChecker->isGranted($attribute));
     }
 }

@@ -11,6 +11,8 @@
 
 namespace Symfony\Component\Form;
 
+use Symfony\Component\Form\Extension\Core\CoreExtension;
+
 /**
  * The default implementation of FormFactoryBuilderInterface.
  *
@@ -18,145 +20,135 @@ namespace Symfony\Component\Form;
  */
 class FormFactoryBuilder implements FormFactoryBuilderInterface
 {
-    /**
-     * @var ResolvedFormTypeFactoryInterface
-     */
-    private $resolvedTypeFactory;
+    private bool $forceCoreExtension;
+
+    private ResolvedFormTypeFactoryInterface $resolvedTypeFactory;
 
     /**
      * @var FormExtensionInterface[]
      */
-    private $extensions = array();
+    private array $extensions = [];
 
     /**
      * @var FormTypeInterface[]
      */
-    private $types = array();
+    private array $types = [];
 
     /**
-     * @var FormTypeExtensionInterface[]
+     * @var FormTypeExtensionInterface[][]
      */
-    private $typeExtensions = array();
+    private array $typeExtensions = [];
 
     /**
      * @var FormTypeGuesserInterface[]
      */
-    private $typeGuessers = array();
+    private array $typeGuessers = [];
 
-    /**
-     * {@inheritdoc}
-     */
-    public function setResolvedTypeFactory(ResolvedFormTypeFactoryInterface $resolvedTypeFactory)
+    public function __construct(bool $forceCoreExtension = false)
+    {
+        $this->forceCoreExtension = $forceCoreExtension;
+    }
+
+    public function setResolvedTypeFactory(ResolvedFormTypeFactoryInterface $resolvedTypeFactory): static
     {
         $this->resolvedTypeFactory = $resolvedTypeFactory;
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addExtension(FormExtensionInterface $extension)
+    public function addExtension(FormExtensionInterface $extension): static
     {
         $this->extensions[] = $extension;
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addExtensions(array $extensions)
+    public function addExtensions(array $extensions): static
     {
         $this->extensions = array_merge($this->extensions, $extensions);
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addType(FormTypeInterface $type)
+    public function addType(FormTypeInterface $type): static
     {
-        $this->types[$type->getName()] = $type;
+        $this->types[] = $type;
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addTypes(array $types)
+    public function addTypes(array $types): static
     {
         foreach ($types as $type) {
-            $this->types[$type->getName()] = $type;
+            $this->types[] = $type;
         }
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addTypeExtension(FormTypeExtensionInterface $typeExtension)
+    public function addTypeExtension(FormTypeExtensionInterface $typeExtension): static
     {
-        $this->typeExtensions[$typeExtension->getExtendedType()][] = $typeExtension;
+        foreach ($typeExtension::getExtendedTypes() as $extendedType) {
+            $this->typeExtensions[$extendedType][] = $typeExtension;
+        }
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addTypeExtensions(array $typeExtensions)
+    public function addTypeExtensions(array $typeExtensions): static
     {
         foreach ($typeExtensions as $typeExtension) {
-            $this->typeExtensions[$typeExtension->getExtendedType()][] = $typeExtension;
+            $this->addTypeExtension($typeExtension);
         }
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addTypeGuesser(FormTypeGuesserInterface $typeGuesser)
+    public function addTypeGuesser(FormTypeGuesserInterface $typeGuesser): static
     {
         $this->typeGuessers[] = $typeGuesser;
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addTypeGuessers(array $typeGuessers)
+    public function addTypeGuessers(array $typeGuessers): static
     {
         $this->typeGuessers = array_merge($this->typeGuessers, $typeGuessers);
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getFormFactory()
+    public function getFormFactory(): FormFactoryInterface
     {
         $extensions = $this->extensions;
 
-        if (count($this->types) > 0 || count($this->typeExtensions) > 0 || count($this->typeGuessers) > 0) {
-            if (count($this->typeGuessers) > 1) {
+        if ($this->forceCoreExtension) {
+            $hasCoreExtension = false;
+
+            foreach ($extensions as $extension) {
+                if ($extension instanceof CoreExtension) {
+                    $hasCoreExtension = true;
+                    break;
+                }
+            }
+
+            if (!$hasCoreExtension) {
+                array_unshift($extensions, new CoreExtension());
+            }
+        }
+
+        if (\count($this->types) > 0 || \count($this->typeExtensions) > 0 || \count($this->typeGuessers) > 0) {
+            if (\count($this->typeGuessers) > 1) {
                 $typeGuesser = new FormTypeGuesserChain($this->typeGuessers);
             } else {
-                $typeGuesser = isset($this->typeGuessers[0]) ? $this->typeGuessers[0] : null;
+                $typeGuesser = $this->typeGuessers[0] ?? null;
             }
 
             $extensions[] = new PreloadedExtension($this->types, $this->typeExtensions, $typeGuesser);
         }
 
-        $resolvedTypeFactory = $this->resolvedTypeFactory ?: new ResolvedFormTypeFactory();
-        $registry = new FormRegistry($extensions, $resolvedTypeFactory);
+        $registry = new FormRegistry($extensions, $this->resolvedTypeFactory ?? new ResolvedFormTypeFactory());
 
-        return new FormFactory($registry, $resolvedTypeFactory);
+        return new FormFactory($registry);
     }
 }

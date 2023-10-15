@@ -11,9 +11,9 @@
 
 namespace Symfony\Component\Form;
 
-use Symfony\Component\Form\Exception\InvalidArgumentException;
-use Symfony\Component\Form\Exception\UnexpectedTypeException;
 use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\Form\Exception\UnexpectedTypeException;
+use Symfony\Component\OptionsResolver\Exception\ExceptionInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
@@ -23,39 +23,25 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  */
 class ResolvedFormType implements ResolvedFormTypeInterface
 {
-    /**
-     * @var FormTypeInterface
-     */
-    private $innerType;
+    private FormTypeInterface $innerType;
 
     /**
      * @var FormTypeExtensionInterface[]
      */
-    private $typeExtensions;
+    private array $typeExtensions;
+
+    private ?ResolvedFormTypeInterface $parent;
+
+    private OptionsResolver $optionsResolver;
 
     /**
-     * @var ResolvedFormTypeInterface|null
+     * @param FormTypeExtensionInterface[] $typeExtensions
      */
-    private $parent;
-
-    /**
-     * @var OptionsResolver
-     */
-    private $optionsResolver;
-
-    public function __construct(FormTypeInterface $innerType, array $typeExtensions = array(), ResolvedFormTypeInterface $parent = null)
+    public function __construct(FormTypeInterface $innerType, array $typeExtensions = [], ResolvedFormTypeInterface $parent = null)
     {
-        if (!preg_match('/^[a-z0-9_]*$/i', $innerType->getName())) {
-            throw new InvalidArgumentException(sprintf(
-                'The "%s" form type name ("%s") is not valid. Names must only contain letters, numbers, and "_".',
-                get_class($innerType),
-                $innerType->getName()
-            ));
-        }
-
         foreach ($typeExtensions as $extension) {
             if (!$extension instanceof FormTypeExtensionInterface) {
-                throw new UnexpectedTypeException($extension, 'Symfony\Component\Form\FormTypeExtensionInterface');
+                throw new UnexpectedTypeException($extension, FormTypeExtensionInterface::class);
             }
         }
 
@@ -64,47 +50,36 @@ class ResolvedFormType implements ResolvedFormTypeInterface
         $this->parent = $parent;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
-        return $this->innerType->getName();
+        return $this->innerType->getBlockPrefix();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getParent()
+    public function getParent(): ?ResolvedFormTypeInterface
     {
         return $this->parent;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getInnerType()
+    public function getInnerType(): FormTypeInterface
     {
         return $this->innerType;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getTypeExtensions()
+    public function getTypeExtensions(): array
     {
         return $this->typeExtensions;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createBuilder(FormFactoryInterface $factory, $name, array $options = array())
+    public function createBuilder(FormFactoryInterface $factory, string $name, array $options = []): FormBuilderInterface
     {
-        $options = $this->getOptionsResolver()->resolve($options);
+        try {
+            $options = $this->getOptionsResolver()->resolve($options);
+        } catch (ExceptionInterface $e) {
+            throw new $e(sprintf('An error has occurred resolving the options of the form "%s": ', get_debug_type($this->getInnerType())).$e->getMessage(), $e->getCode(), $e);
+        }
 
         // Should be decoupled from the specific option at some point
-        $dataClass = isset($options['data_class']) ? $options['data_class'] : null;
+        $dataClass = $options['data_class'] ?? null;
 
         $builder = $this->newBuilder($name, $dataClass, $factory, $options);
         $builder->setType($this);
@@ -112,25 +87,17 @@ class ResolvedFormType implements ResolvedFormTypeInterface
         return $builder;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createView(FormInterface $form, FormView $parent = null)
+    public function createView(FormInterface $form, FormView $parent = null): FormView
     {
         return $this->newView($parent);
     }
 
     /**
-     * Configures a form builder for the type hierarchy.
-     *
-     * @param FormBuilderInterface $builder The builder to configure
-     * @param array                $options The options used for the configuration
+     * @return void
      */
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
-        if (null !== $this->parent) {
-            $this->parent->buildForm($builder, $options);
-        }
+        $this->parent?->buildForm($builder, $options);
 
         $this->innerType->buildForm($builder, $options);
 
@@ -140,19 +107,11 @@ class ResolvedFormType implements ResolvedFormTypeInterface
     }
 
     /**
-     * Configures a form view for the type hierarchy.
-     *
-     * This method is called before the children of the view are built.
-     *
-     * @param FormView      $view    The form view to configure
-     * @param FormInterface $form    The form corresponding to the view
-     * @param array         $options The options used for the configuration
+     * @return void
      */
     public function buildView(FormView $view, FormInterface $form, array $options)
     {
-        if (null !== $this->parent) {
-            $this->parent->buildView($view, $form, $options);
-        }
+        $this->parent?->buildView($view, $form, $options);
 
         $this->innerType->buildView($view, $form, $options);
 
@@ -162,19 +121,11 @@ class ResolvedFormType implements ResolvedFormTypeInterface
     }
 
     /**
-     * Finishes a form view for the type hierarchy.
-     *
-     * This method is called after the children of the view have been built.
-     *
-     * @param FormView      $view    The form view to configure
-     * @param FormInterface $form    The form corresponding to the view
-     * @param array         $options The options used for the configuration
+     * @return void
      */
     public function finishView(FormView $view, FormInterface $form, array $options)
     {
-        if (null !== $this->parent) {
-            $this->parent->finishView($view, $form, $options);
-        }
+        $this->parent?->finishView($view, $form, $options);
 
         $this->innerType->finishView($view, $form, $options);
 
@@ -184,52 +135,19 @@ class ResolvedFormType implements ResolvedFormTypeInterface
         }
     }
 
-    /**
-     * Returns the configured options resolver used for this type.
-     *
-     * @return \Symfony\Component\OptionsResolver\OptionsResolverInterface The options resolver
-     */
-    public function getOptionsResolver()
+    public function getOptionsResolver(): OptionsResolver
     {
-        if (null === $this->optionsResolver) {
+        if (!isset($this->optionsResolver)) {
             if (null !== $this->parent) {
                 $this->optionsResolver = clone $this->parent->getOptionsResolver();
             } else {
                 $this->optionsResolver = new OptionsResolver();
             }
 
-            $this->innerType->setDefaultOptions($this->optionsResolver);
-
-            if (method_exists($this->innerType, 'configureOptions')) {
-                $reflector = new \ReflectionMethod($this->innerType, 'setDefaultOptions');
-                $isOldOverwritten = 'Symfony\Component\Form\AbstractType' !== $reflector->getDeclaringClass()->getName();
-
-                $reflector = new \ReflectionMethod($this->innerType, 'configureOptions');
-                $isNewOverwritten = 'Symfony\Component\Form\AbstractType' !== $reflector->getDeclaringClass()->getName();
-
-                if ($isOldOverwritten && !$isNewOverwritten) {
-                    @trigger_error(get_class($this->innerType).': The FormTypeInterface::setDefaultOptions() method is deprecated since Symfony 2.7 and will be removed in 3.0. Use configureOptions() instead. This method will be added to the FormTypeInterface with Symfony 3.0.', E_USER_DEPRECATED);
-                }
-            } else {
-                @trigger_error(get_class($this->innerType).': The FormTypeInterface::configureOptions() method will be added in Symfony 3.0. You should extend AbstractType or implement it in your classes.', E_USER_DEPRECATED);
-            }
+            $this->innerType->configureOptions($this->optionsResolver);
 
             foreach ($this->typeExtensions as $extension) {
-                $extension->setDefaultOptions($this->optionsResolver);
-
-                if (method_exists($extension, 'configureOptions')) {
-                    $reflector = new \ReflectionMethod($extension, 'setDefaultOptions');
-                    $isOldOverwritten = 'Symfony\Component\Form\AbstractTypeExtension' !== $reflector->getDeclaringClass()->getName();
-
-                    $reflector = new \ReflectionMethod($extension, 'configureOptions');
-                    $isNewOverwritten = 'Symfony\Component\Form\AbstractTypeExtension' !== $reflector->getDeclaringClass()->getName();
-
-                    if ($isOldOverwritten && !$isNewOverwritten) {
-                        @trigger_error(get_class($extension).': The FormTypeExtensionInterface::setDefaultOptions() method is deprecated since Symfony 2.7 and will be removed in 3.0. Use configureOptions() instead. This method will be added to the FormTypeExtensionInterface with Symfony 3.0.', E_USER_DEPRECATED);
-                    }
-                } else {
-                    @trigger_error(get_class($this->innerType).': The FormTypeExtensionInterface::configureOptions() method will be added in Symfony 3.0. You should extend AbstractTypeExtension or implement it in your classes.', E_USER_DEPRECATED);
-                }
+                $extension->configureOptions($this->optionsResolver);
             }
         }
 
@@ -240,15 +158,8 @@ class ResolvedFormType implements ResolvedFormTypeInterface
      * Creates a new builder instance.
      *
      * Override this method if you want to customize the builder class.
-     *
-     * @param string               $name      The name of the builder
-     * @param string               $dataClass The data class
-     * @param FormFactoryInterface $factory   The current form factory
-     * @param array                $options   The builder options
-     *
-     * @return FormBuilderInterface The new builder instance
      */
-    protected function newBuilder($name, $dataClass, FormFactoryInterface $factory, array $options)
+    protected function newBuilder(string $name, ?string $dataClass, FormFactoryInterface $factory, array $options): FormBuilderInterface
     {
         if ($this->innerType instanceof ButtonTypeInterface) {
             return new ButtonBuilder($name, $options);
@@ -265,12 +176,8 @@ class ResolvedFormType implements ResolvedFormTypeInterface
      * Creates a new view instance.
      *
      * Override this method if you want to customize the view class.
-     *
-     * @param FormView|null $parent The parent view, if available
-     *
-     * @return FormView A new view instance
      */
-    protected function newView(FormView $parent = null)
+    protected function newView(FormView $parent = null): FormView
     {
         return new FormView($parent);
     }

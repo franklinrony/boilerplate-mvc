@@ -14,16 +14,28 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 use Symfony\Component\Intl\Util\IntlTestHelper;
 use Symfony\Component\Validator\Constraints\Currency;
 use Symfony\Component\Validator\Constraints\CurrencyValidator;
-use Symfony\Component\Validator\Validation;
+use Symfony\Component\Validator\Exception\UnexpectedValueException;
+use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
-class CurrencyValidatorTest extends AbstractConstraintValidatorTest
+class CurrencyValidatorTest extends ConstraintValidatorTestCase
 {
-    protected function getApiVersion()
+    private $defaultLocale;
+
+    protected function setUp(): void
     {
-        return Validation::API_VERSION_2_5;
+        parent::setUp();
+
+        $this->defaultLocale = \Locale::getDefault();
     }
 
-    protected function createValidator()
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+
+        \Locale::setDefault($this->defaultLocale);
+    }
+
+    protected function createValidator(): CurrencyValidator
     {
         return new CurrencyValidator();
     }
@@ -42,11 +54,9 @@ class CurrencyValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    /**
-     * @expectedException \Symfony\Component\Validator\Exception\UnexpectedTypeException
-     */
     public function testExpectsStringCompatibleType()
     {
+        $this->expectException(UnexpectedValueException::class);
         $this->validator->validate(new \stdClass(), new Currency());
     }
 
@@ -74,15 +84,15 @@ class CurrencyValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    public function getValidCurrencies()
+    public static function getValidCurrencies()
     {
-        return array(
-            array('EUR'),
-            array('USD'),
-            array('SIT'),
-            array('AUD'),
-            array('CAD'),
-        );
+        return [
+            ['EUR'],
+            ['USD'],
+            ['SIT'],
+            ['AUD'],
+            ['CAD'],
+        ];
     }
 
     /**
@@ -90,22 +100,38 @@ class CurrencyValidatorTest extends AbstractConstraintValidatorTest
      */
     public function testInvalidCurrencies($currency)
     {
-        $constraint = new Currency(array(
+        $constraint = new Currency([
             'message' => 'myMessage',
-        ));
+        ]);
 
         $this->validator->validate($currency, $constraint);
 
         $this->buildViolation('myMessage')
             ->setParameter('{{ value }}', '"'.$currency.'"')
+            ->setCode(Currency::NO_SUCH_CURRENCY_ERROR)
             ->assertRaised();
     }
 
-    public function getInvalidCurrencies()
+    /**
+     * @dataProvider getInvalidCurrencies
+     */
+    public function testInvalidCurrenciesNamed($currency)
     {
-        return array(
-            array('EN'),
-            array('foobar'),
-        );
+        $constraint = new Currency(message: 'myMessage');
+
+        $this->validator->validate($currency, $constraint);
+
+        $this->buildViolation('myMessage')
+            ->setParameter('{{ value }}', '"'.$currency.'"')
+            ->setCode(Currency::NO_SUCH_CURRENCY_ERROR)
+            ->assertRaised();
+    }
+
+    public static function getInvalidCurrencies()
+    {
+        return [
+            ['EN'],
+            ['foobar'],
+        ];
     }
 }

@@ -13,10 +13,12 @@ namespace Symfony\Bridge\Twig\Tests\Extension;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Bridge\Twig\Extension\DumpExtension;
-use Symfony\Component\VarDumper\VarDumper;
 use Symfony\Component\VarDumper\Cloner\VarCloner;
+use Symfony\Component\VarDumper\Dumper\HtmlDumper;
+use Symfony\Component\VarDumper\VarDumper;
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
+use Twig\Loader\LoaderInterface;
 
 class DumpExtensionTest extends TestCase
 {
@@ -26,11 +28,11 @@ class DumpExtensionTest extends TestCase
     public function testDumpTag($template, $debug, $expectedOutput, $expectedDumped)
     {
         $extension = new DumpExtension(new VarCloner());
-        $twig = new Environment(new ArrayLoader(array('template' => $template)), array(
+        $twig = new Environment(new ArrayLoader(['template' => $template]), [
             'debug' => $debug,
             'cache' => false,
             'optimizations' => 0,
-        ));
+        ]);
         $twig->addExtension($extension);
 
         $dumped = null;
@@ -51,13 +53,13 @@ class DumpExtensionTest extends TestCase
         $this->assertSame($expectedDumped, $dumped);
     }
 
-    public function getDumpTags()
+    public static function getDumpTags()
     {
-        return array(
-            array('A{% dump %}B', true, 'AB', array()),
-            array('A{% set foo="bar"%}B{% dump %}C', true, 'ABC', array('foo' => 'bar')),
-            array('A{% dump %}B', false, 'AB', null),
-        );
+        return [
+            ['A{% dump %}B', true, 'AB', []],
+            ['A{% set foo="bar"%}B{% dump %}C', true, 'ABC', ['foo' => 'bar']],
+            ['A{% dump %}B', false, 'AB', null],
+        ];
     }
 
     /**
@@ -66,44 +68,80 @@ class DumpExtensionTest extends TestCase
     public function testDump($context, $args, $expectedOutput, $debug = true)
     {
         $extension = new DumpExtension(new VarCloner());
-        $twig = new Environment($this->getMockBuilder('Twig\Loader\LoaderInterface')->getMock(), array(
+        $twig = new Environment($this->createMock(LoaderInterface::class), [
             'debug' => $debug,
             'cache' => false,
             'optimizations' => 0,
-        ));
+        ]);
 
         array_unshift($args, $context);
         array_unshift($args, $twig);
 
-        $dump = call_user_func_array(array($extension, 'dump'), $args);
+        $dump = $extension->dump(...$args);
 
         if ($debug) {
             $this->assertStringStartsWith('<script>', $dump);
             $dump = preg_replace('/^.*?<pre/', '<pre', $dump);
             $dump = preg_replace('/sf-dump-\d+/', 'sf-dump', $dump);
+            $dump = preg_replace('/<samp [^>]++>/', '<samp>', $dump);
         }
         $this->assertEquals($expectedOutput, $dump);
     }
 
-    public function getDumpArgs()
+    public static function getDumpArgs()
     {
-        return array(
-            array(array(), array(), '', false),
-            array(array(), array(), "<pre class=sf-dump id=sf-dump data-indent-pad=\"  \">[]\n</pre><script>Sfdump(\"sf-dump\")</script>\n"),
-            array(
-                array(),
-                array(123, 456),
+        return [
+            [[], [], '', false],
+            [[], [], "<pre class=sf-dump id=sf-dump data-indent-pad=\"  \">[]\n</pre><script>Sfdump(\"sf-dump\")</script>\n"],
+            [
+                [],
+                [123, 456],
                 "<pre class=sf-dump id=sf-dump data-indent-pad=\"  \"><span class=sf-dump-num>123</span>\n</pre><script>Sfdump(\"sf-dump\")</script>\n"
                 ."<pre class=sf-dump id=sf-dump data-indent-pad=\"  \"><span class=sf-dump-num>456</span>\n</pre><script>Sfdump(\"sf-dump\")</script>\n",
-            ),
-            array(
-                array('foo' => 'bar'),
-                array(),
+            ],
+            [
+                ['foo' => 'bar'],
+                [],
                 "<pre class=sf-dump id=sf-dump data-indent-pad=\"  \"><span class=sf-dump-note>array:1</span> [<samp>\n"
                 ."  \"<span class=sf-dump-key>foo</span>\" => \"<span class=sf-dump-str title=\"3 characters\">bar</span>\"\n"
                 ."</samp>]\n"
                 ."</pre><script>Sfdump(\"sf-dump\")</script>\n",
-            ),
+            ],
+        ];
+    }
+
+    public function testCustomDumper()
+    {
+        $output = '';
+        $lineDumper = function ($line) use (&$output) {
+            $output .= $line;
+        };
+
+        $dumper = new HtmlDumper($lineDumper);
+
+        $dumper->setDumpHeader('');
+        $dumper->setDumpBoundaries(
+            '<pre class=sf-dump-test id=%s data-indent-pad="%s">',
+            '</pre><script>Sfdump("%s")</script>'
         );
+        $extension = new DumpExtension(new VarCloner(), $dumper);
+        $twig = new Environment($this->createMock(LoaderInterface::class), [
+            'debug' => true,
+            'cache' => false,
+            'optimizations' => 0,
+        ]);
+
+        $dump = $extension->dump($twig, [], 'foo');
+        $dump = preg_replace('/sf-dump-\d+/', 'sf-dump', $dump);
+
+        $this->assertEquals(
+            '<pre class=sf-dump-test id=sf-dump data-indent-pad="  ">"'.
+            "<span class=sf-dump-str title=\"3 characters\">foo</span>\"\n".
+            "</pre><script>Sfdump(\"sf-dump\")</script>\n",
+            $dump,
+            'Custom dumper should be used to dump data.'
+        );
+
+        $this->assertEmpty($output, 'Dumper output should be ignored.');
     }
 }

@@ -8,8 +8,8 @@
  * Editado por:
  * Fecha:
  */
-require '/../'.'vendor/autoload.php';
-require '/../'.'twig.php';
+require '../'.'vendor/autoload.php';
+require '../'.'twig.php';
 use Bramus\Router\Router;
 
 //Mostrar errores en el navegador

@@ -19,12 +19,9 @@ namespace Symfony\Component\Security\Core\Authorization;
 interface AuthorizationCheckerInterface
 {
     /**
-     * Checks if the attributes are granted against the current authentication token and optionally supplied object.
+     * Checks if the attribute is granted against the current authentication token and optionally supplied subject.
      *
-     * @param mixed $attributes
-     * @param mixed $object
-     *
-     * @return bool
+     * @param mixed $attribute A single attribute to vote on (can be of any type, string and instance of Expression are supported by the core)
      */
-    public function isGranted($attributes, $object = null);
+    public function isGranted(mixed $attribute, mixed $subject = null): bool;
 }

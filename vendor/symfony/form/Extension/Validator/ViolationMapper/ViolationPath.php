@@ -17,46 +17,30 @@ use Symfony\Component\PropertyAccess\PropertyPathInterface;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
+ *
+ * @implements \IteratorAggregate<int, string>
  */
 class ViolationPath implements \IteratorAggregate, PropertyPathInterface
 {
-    /**
-     * @var array
-     */
-    private $elements = array();
-
-    /**
-     * @var array
-     */
-    private $isIndex = array();
-
-    /**
-     * @var array
-     */
-    private $mapsForm = array();
-
-    /**
-     * @var string
-     */
-    private $pathAsString = '';
-
-    /**
-     * @var int
-     */
-    private $length = 0;
+    /** @var list<string> */
+    private array $elements = [];
+    private array $isIndex = [];
+    private array $mapsForm = [];
+    private string $pathAsString = '';
+    private int $length = 0;
 
     /**
      * Creates a new violation path from a string.
      *
      * @param string $violationPath The property path of a {@link \Symfony\Component\Validator\ConstraintViolation} object
      */
-    public function __construct($violationPath)
+    public function __construct(string $violationPath)
     {
         $path = new PropertyPath($violationPath);
         $elements = $path->getElements();
         $data = false;
 
-        for ($i = 0, $l = count($elements); $i < $l; ++$i) {
+        for ($i = 0, $l = \count($elements); $i < $l; ++$i) {
             if (!$data) {
                 // The element "data" has not yet been passed
                 if ('children' === $elements[$i] && $path->isProperty($i)) {
@@ -107,34 +91,25 @@ class ViolationPath implements \IteratorAggregate, PropertyPathInterface
             }
         }
 
-        $this->length = count($this->elements);
+        $this->length = \count($this->elements);
 
         $this->buildString();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function __toString()
+    public function __toString(): string
     {
         return $this->pathAsString;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getLength()
+    public function getLength(): int
     {
         return $this->length;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getParent()
+    public function getParent(): ?PropertyPathInterface
     {
         if ($this->length <= 1) {
-            return;
+            return null;
         }
 
         $parent = clone $this;
@@ -149,48 +124,41 @@ class ViolationPath implements \IteratorAggregate, PropertyPathInterface
         return $parent;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getElements()
+    public function getElements(): array
     {
         return $this->elements;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getElement($index)
+    public function getElement(int $index): string
     {
         if (!isset($this->elements[$index])) {
-            throw new OutOfBoundsException(sprintf('The index %s is not within the violation path', $index));
+            throw new OutOfBoundsException(sprintf('The index "%s" is not within the violation path.', $index));
         }
 
         return $this->elements[$index];
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function isProperty($index)
+    public function isProperty(int $index): bool
     {
         if (!isset($this->isIndex[$index])) {
-            throw new OutOfBoundsException(sprintf('The index %s is not within the violation path', $index));
+            throw new OutOfBoundsException(sprintf('The index "%s" is not within the violation path.', $index));
         }
 
         return !$this->isIndex[$index];
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function isIndex($index)
+    public function isIndex(int $index): bool
     {
         if (!isset($this->isIndex[$index])) {
-            throw new OutOfBoundsException(sprintf('The index %s is not within the violation path', $index));
+            throw new OutOfBoundsException(sprintf('The index "%s" is not within the violation path.', $index));
         }
 
         return $this->isIndex[$index];
+    }
+
+    public function isNullSafe(int $index): bool
+    {
+        return false;
     }
 
     /**
@@ -198,23 +166,17 @@ class ViolationPath implements \IteratorAggregate, PropertyPathInterface
      *
      * Consider the following violation path:
      *
-     * <code>
-     * children[address].children[office].data.street
-     * </code>
+     *     children[address].children[office].data.street
      *
      * In this example, "address" and "office" map to forms, while
      * "street does not.
      *
-     * @param int $index The element index
-     *
-     * @return bool Whether the element maps to a form
-     *
      * @throws OutOfBoundsException if the offset is invalid
      */
-    public function mapsForm($index)
+    public function mapsForm(int $index): bool
     {
         if (!isset($this->mapsForm[$index])) {
-            throw new OutOfBoundsException(sprintf('The index %s is not within the violation path', $index));
+            throw new OutOfBoundsException(sprintf('The index "%s" is not within the violation path.', $index));
         }
 
         return $this->mapsForm[$index];
@@ -222,10 +184,8 @@ class ViolationPath implements \IteratorAggregate, PropertyPathInterface
 
     /**
      * Returns a new iterator for this path.
-     *
-     * @return ViolationPathIterator
      */
-    public function getIterator()
+    public function getIterator(): ViolationPathIterator
     {
         return new ViolationPathIterator($this);
     }
@@ -233,7 +193,7 @@ class ViolationPath implements \IteratorAggregate, PropertyPathInterface
     /**
      * Builds the string representation from the elements.
      */
-    private function buildString()
+    private function buildString(): void
     {
         $this->pathAsString = '';
         $data = false;

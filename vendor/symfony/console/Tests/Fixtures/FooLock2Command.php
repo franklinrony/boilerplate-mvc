@@ -9,12 +9,12 @@ class FooLock2Command extends Command
 {
     use LockableTrait;
 
-    protected function configure()
+    protected function configure(): void
     {
         $this->setName('foo:lock2');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
             $this->lock();

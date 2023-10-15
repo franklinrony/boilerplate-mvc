@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\Security\Core\Exception;
 
+use Symfony\Component\HttpKernel\Attribute\WithHttpStatus;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
 /**
@@ -19,45 +20,72 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
  * @author Fabien Potencier <fabien@symfony.com>
  * @author Alexander <iam.asm89@gmail.com>
  */
-class AuthenticationException extends \RuntimeException implements \Serializable
+#[WithHttpStatus(401)]
+class AuthenticationException extends RuntimeException
 {
-    private $token;
+    /** @internal */
+    protected $serialized;
 
-    /**
-     * Get the token.
-     *
-     * @return TokenInterface
-     */
-    public function getToken()
+    private ?TokenInterface $token = null;
+
+    public function __construct(string $message = '', int $code = 0, \Throwable $previous = null)
+    {
+        unset($this->serialized);
+        parent::__construct($message, $code, $previous);
+    }
+
+    public function getToken(): ?TokenInterface
     {
         return $this->token;
     }
 
+    /**
+     * @return void
+     */
     public function setToken(TokenInterface $token)
     {
         $this->token = $token;
     }
 
-    public function serialize()
+    /**
+     * Returns all the necessary state of the object for serialization purposes.
+     *
+     * There is no need to serialize any entry, they should be returned as-is.
+     * If you extend this method, keep in mind you MUST guarantee parent data is present in the state.
+     * Here is an example of how to extend this method:
+     * <code>
+     *     public function __serialize(): array
+     *     {
+     *         return [$this->childAttribute, parent::__serialize()];
+     *     }
+     * </code>
+     *
+     * @see __unserialize()
+     */
+    public function __serialize(): array
     {
-        return serialize(array(
-            $this->token,
-            $this->code,
-            $this->message,
-            $this->file,
-            $this->line,
-        ));
+        return [$this->token, $this->code, $this->message, $this->file, $this->line];
     }
 
-    public function unserialize($str)
+    /**
+     * Restores the object state from an array given by __serialize().
+     *
+     * There is no need to unserialize any entry in $data, they are already ready-to-use.
+     * If you extend this method, keep in mind you MUST pass the parent data to its respective class.
+     * Here is an example of how to extend this method:
+     * <code>
+     *     public function __unserialize(array $data): void
+     *     {
+     *         [$this->childAttribute, $parentData] = $data;
+     *         parent::__unserialize($parentData);
+     *     }
+     * </code>
+     *
+     * @see __serialize()
+     */
+    public function __unserialize(array $data): void
     {
-        list(
-            $this->token,
-            $this->code,
-            $this->message,
-            $this->file,
-            $this->line
-        ) = unserialize($str);
+        [$this->token, $this->code, $this->message, $this->file, $this->line] = $data;
     }
 
     /**
@@ -72,11 +100,28 @@ class AuthenticationException extends \RuntimeException implements \Serializable
 
     /**
      * Message data to be used by the translation component.
-     *
-     * @return array
      */
-    public function getMessageData()
+    public function getMessageData(): array
     {
-        return array();
+        return [];
+    }
+
+    /**
+     * @internal
+     */
+    public function __sleep(): array
+    {
+        $this->serialized = $this->__serialize();
+
+        return ['serialized'];
+    }
+
+    /**
+     * @internal
+     */
+    public function __wakeup(): void
+    {
+        $this->__unserialize($this->serialized);
+        unset($this->serialized);
     }
 }

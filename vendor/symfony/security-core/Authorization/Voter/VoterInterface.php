@@ -20,31 +20,9 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
  */
 interface VoterInterface
 {
-    const ACCESS_GRANTED = 1;
-    const ACCESS_ABSTAIN = 0;
-    const ACCESS_DENIED = -1;
-
-    /**
-     * Checks if the voter supports the given attribute.
-     *
-     * @param mixed $attribute An attribute (usually the attribute name string)
-     *
-     * @return bool true if this Voter supports the attribute, false otherwise
-     *
-     * @deprecated since version 2.8, to be removed in 3.0.
-     */
-    public function supportsAttribute($attribute);
-
-    /**
-     * Checks if the voter supports the given class.
-     *
-     * @param string $class A class name
-     *
-     * @return bool true if this Voter can process the class
-     *
-     * @deprecated since version 2.8, to be removed in 3.0.
-     */
-    public function supportsClass($class);
+    public const ACCESS_GRANTED = 1;
+    public const ACCESS_ABSTAIN = 0;
+    public const ACCESS_DENIED = -1;
 
     /**
      * Returns the vote for the given parameters.
@@ -52,11 +30,12 @@ interface VoterInterface
      * This method must return one of the following constants:
      * ACCESS_GRANTED, ACCESS_DENIED, or ACCESS_ABSTAIN.
      *
-     * @param TokenInterface $token      A TokenInterface instance
-     * @param object|null    $object     The object to secure
-     * @param array          $attributes An array of attributes associated with the method being invoked
+     * @param mixed $subject    The subject to secure
+     * @param array $attributes An array of attributes associated with the method being invoked
      *
      * @return int either ACCESS_GRANTED, ACCESS_ABSTAIN, or ACCESS_DENIED
+     *
+     * @psalm-return self::ACCESS_* must be transformed into @return on Symfony 7
      */
-    public function vote(TokenInterface $token, $object, array $attributes);
+    public function vote(TokenInterface $token, mixed $subject, array $attributes);
 }

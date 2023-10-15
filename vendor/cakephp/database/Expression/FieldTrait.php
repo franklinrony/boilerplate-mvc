@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,26 +16,27 @@
  */
 namespace Cake\Database\Expression;
 
+use Cake\Database\ExpressionInterface;
+
 /**
  * Contains the field property with a getter and a setter for it
  */
 trait FieldTrait
 {
-
     /**
      * The field name or expression to be used in the left hand side of the operator
      *
-     * @var string|\Cake\Database\ExpressionInterface
+     * @var \Cake\Database\ExpressionInterface|array|string
      */
-    protected $_field;
+    protected ExpressionInterface|array|string $_field;
 
     /**
      * Sets the field name
      *
-     * @param string|\Cake\Database\ExpressionInterface $field The field to compare with.
+     * @param \Cake\Database\ExpressionInterface|array|string $field The field to compare with.
      * @return void
      */
-    public function setField($field)
+    public function setField(ExpressionInterface|array|string $field): void
     {
         $this->_field = $field;
     }
@@ -41,9 +44,9 @@ trait FieldTrait
     /**
      * Returns the field name
      *
-     * @return string|\Cake\Database\ExpressionInterface
+     * @return \Cake\Database\ExpressionInterface|array|string
      */
-    public function getField()
+    public function getField(): ExpressionInterface|array|string
     {
         return $this->_field;
     }

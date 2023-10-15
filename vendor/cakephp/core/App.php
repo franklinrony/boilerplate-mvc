@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,6 +16,8 @@
  */
 namespace Cake\Core;
 
+use Cake\Core\Exception\CakeException;
+
 /**
  * App is responsible for resource location, and path management.
  *
@@ -25,22 +29,21 @@ namespace Cake\Core;
  *
  * ### Inspecting loaded paths
  *
- * You can inspect the currently loaded paths using `App::path('Controller')` for example to see loaded
+ * You can inspect the currently loaded paths using `App::classPath('Controller')` for example to see loaded
  * controller paths.
  *
  * It is also possible to inspect paths for plugin classes, for instance, to get
- * the path to a plugin's helpers you would call `App::path('View/Helper', 'MyPlugin')`
+ * the path to a plugin's helpers you would call `App::classPath('View/Helper', 'MyPlugin')`
  *
  * ### Locating plugins
  *
  * Plugins can be located with App as well. Using Plugin::path('DebugKit') for example, will
  * give you the full path to the DebugKit plugin.
  *
- * @link https://book.cakephp.org/3.0/en/core-libraries/app.html
+ * @link https://book.cakephp.org/4/en/core-libraries/app.html
  */
 class App
 {
-
     /**
      * Return the class name namespaced. This method checks if the class is defined on the
      * application/plugin, otherwise try to load from the CakePHP core
@@ -48,30 +51,33 @@ class App
      * @param string $class Class name
      * @param string $type Type of class
      * @param string $suffix Class name suffix
-     * @return false|string False if the class is not found or namespaced class name
+     * @return class-string|null Namespaced class name, null if the class is not found.
      */
-    public static function className($class, $type = '', $suffix = '')
+    public static function className(string $class, string $type = '', string $suffix = ''): ?string
     {
-        if (strpos($class, '\\') !== false) {
-            return $class;
+        if (str_contains($class, '\\')) {
+            return class_exists($class) ? $class : null;
         }
 
-        list($plugin, $name) = pluginSplit($class);
-        $base = $plugin ?: Configure::read('App.namespace');
-        $base = str_replace('/', '\\', rtrim($base, '\\'));
+        [$plugin, $name] = pluginSplit($class);
         $fullname = '\\' . str_replace('/', '\\', $type . '\\' . $name) . $suffix;
 
-        if (static::_classExistsInBase($fullname, $base)) {
-            return $base . $fullname;
-        }
-        if ($plugin) {
-            return false;
-        }
-        if (static::_classExistsInBase($fullname, 'Cake')) {
-            return 'Cake' . $fullname;
+        $base = $plugin ?: Configure::read('App.namespace');
+        if ($base !== null) {
+            $base = str_replace('/', '\\', rtrim($base, '\\'));
+
+            if (static::_classExistsInBase($fullname, $base)) {
+                /** @var class-string */
+                return $base . $fullname;
+            }
         }
 
-        return false;
+        if ($plugin || !static::_classExistsInBase($fullname, 'Cake')) {
+            return null;
+        }
+
+        /** @var class-string */
+        return 'Cake' . $fullname;
     }
 
     /**
@@ -101,25 +107,29 @@ class App
      *
      * ```
      * App::shortName(
-     *     'Cake\Controller\Component\AuthComponent',
+     *     'Cake\Controller\Component\FlashComponent',
      *     'Controller/Component',
      *     'Component'
      * )
      * ```
      *
-     * Returns: Auth
+     * Returns: Flash
      *
      * @param string $class Class name
      * @param string $type Type of class
      * @param string $suffix Class name suffix
      * @return string Plugin split name of class
      */
-    public static function shortName($class, $type, $suffix = '')
+    public static function shortName(string $class, string $type, string $suffix = ''): string
     {
         $class = str_replace('\\', '/', $class);
         $type = '/' . $type . '/';
 
         $pos = strrpos($class, $type);
+        if ($pos === false) {
+            return $class;
+        }
+
         $pluginName = substr($class, 0, $pos);
         $name = substr($class, $pos + strlen($type));
 
@@ -129,9 +139,9 @@ class App
 
         $nonPluginNamespaces = [
             'Cake',
-            str_replace('\\', '/', Configure::read('App.namespace'))
+            str_replace('\\', '/', (string)Configure::read('App.namespace')),
         ];
-        if (in_array($pluginName, $nonPluginNamespaces)) {
+        if (in_array($pluginName, $nonPluginNamespaces, true)) {
             return $name;
         }
 
@@ -147,47 +157,79 @@ class App
      * @param string $namespace Namespace.
      * @return bool
      */
-    protected static function _classExistsInBase($name, $namespace)
+    protected static function _classExistsInBase(string $name, string $namespace): bool
     {
         return class_exists($namespace . $name);
     }
 
     /**
-     * Used to read information stored path
+     * Used to read information of stored path.
      *
-     * Usage:
+     * When called without the `$plugin` argument it will return the value of `App.paths.$type` config.
+     *
+     * Default types:
+     * - plugins
+     * - templates
+     * - locales
+     *
+     * Example:
      *
      * ```
-     * App::path('Plugin');
+     * App::path('plugins');
      * ```
      *
-     * Will return the configured paths for plugins. This is a simpler way to access
-     * the `App.paths.plugins` configure variable.
+     * Will return the value of `App.paths.plugins` config.
      *
-     * ```
-     * App::path('Model/Datasource', 'MyPlugin');
-     * ```
+     * For plugins it can be used to get paths for types `templates` or `locales`.
      *
-     * Will return the path for datasources under the 'MyPlugin' plugin.
-     *
-     * @param string $type type of path
-     * @param string|null $plugin name of plugin
-     * @return array
-     * @link https://book.cakephp.org/3.0/en/core-libraries/app.html#finding-paths-to-namespaces
+     * @param string $type Type of path
+     * @param string|null $plugin Plugin name
+     * @return array<string>
+     * @link https://book.cakephp.org/4/en/core-libraries/app.html#finding-paths-to-namespaces
      */
-    public static function path($type, $plugin = null)
+    public static function path(string $type, ?string $plugin = null): array
     {
-        if ($type === 'Plugin') {
-            return (array)Configure::read('App.paths.plugins');
+        if ($plugin === null) {
+            return (array)Configure::read('App.paths.' . $type);
         }
-        if (empty($plugin) && $type === 'Locale') {
-            return (array)Configure::read('App.paths.locales');
-        }
-        if (empty($plugin) && $type === 'Template') {
-            return (array)Configure::read('App.paths.templates');
-        }
-        if (!empty($plugin)) {
-            return [Plugin::classPath($plugin) . $type . DIRECTORY_SEPARATOR];
+
+        return match ($type) {
+            'templates' => [Plugin::templatePath($plugin)],
+            'locales' => [Plugin::path($plugin) . 'resources' . DIRECTORY_SEPARATOR . 'locales' . DIRECTORY_SEPARATOR],
+            default => throw new CakeException(sprintf(
+                'Invalid type `%s`. Only path types `templates` and `locales` are supported for plugins.',
+                $type
+            ))
+        };
+    }
+
+    /**
+     * Gets the path to a class type in the application or a plugin.
+     *
+     * Example:
+     *
+     * ```
+     * App::classPath('Model/Table');
+     * ```
+     *
+     * Will return the path for tables - e.g. `src/Model/Table/`.
+     *
+     * ```
+     * App::classPath('Model/Table', 'My/Plugin');
+     * ```
+     *
+     * Will return the plugin based path for those.
+     *
+     * @param string $type Package type.
+     * @param string|null $plugin Plugin name.
+     * @return array<string>
+     */
+    public static function classPath(string $type, ?string $plugin = null): array
+    {
+        if ($plugin !== null) {
+            return [
+                Plugin::classPath($plugin) . $type . DIRECTORY_SEPARATOR,
+            ];
         }
 
         return [APP . $type . DIRECTORY_SEPARATOR];
@@ -205,10 +247,14 @@ class App
      * Will return the full path to the cache engines package.
      *
      * @param string $type Package type.
-     * @return array Full path to package
+     * @return array<string> Full path to package
      */
-    public static function core($type)
+    public static function core(string $type): array
     {
+        if ($type === 'templates') {
+            return [CORE_PATH . 'templates' . DIRECTORY_SEPARATOR];
+        }
+
         return [CAKE . str_replace('/', DIRECTORY_SEPARATOR, $type) . DIRECTORY_SEPARATOR];
     }
 }

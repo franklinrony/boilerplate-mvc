@@ -22,13 +22,13 @@ use Twig\Node\Expression\FunctionExpression;
  *
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
-class RenderBlockNode extends FunctionExpression
+final class RenderBlockNode extends FunctionExpression
 {
-    public function compile(Compiler $compiler)
+    public function compile(Compiler $compiler): void
     {
         $compiler->addDebugInfo($this);
         $arguments = iterator_to_array($this->getNode('arguments'));
-        $compiler->write('$this->env->getExtension(\'Symfony\Bridge\Twig\Extension\FormExtension\')->renderer->renderBlock(');
+        $compiler->write('$this->env->getRuntime(\'Symfony\Component\Form\FormRenderer\')->renderBlock(');
 
         if (isset($arguments[0])) {
             $compiler->subcompile($arguments[0]);

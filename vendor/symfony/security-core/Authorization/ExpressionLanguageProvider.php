@@ -21,38 +21,16 @@ use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
  */
 class ExpressionLanguageProvider implements ExpressionFunctionProviderInterface
 {
-    public function getFunctions()
+    public function getFunctions(): array
     {
-        return array(
-            new ExpressionFunction('is_anonymous', function () {
-                return '$trust_resolver->isAnonymous($token)';
-            }, function (array $variables) {
-                return $variables['trust_resolver']->isAnonymous($variables['token']);
-            }),
+        return [
+            new ExpressionFunction('is_authenticated', fn () => '$auth_checker->isGranted("IS_AUTHENTICATED")', fn (array $variables) => $variables['auth_checker']->isGranted('IS_AUTHENTICATED')),
 
-            new ExpressionFunction('is_authenticated', function () {
-                return '$token && !$trust_resolver->isAnonymous($token)';
-            }, function (array $variables) {
-                return $variables['token'] && !$variables['trust_resolver']->isAnonymous($variables['token']);
-            }),
+            new ExpressionFunction('is_fully_authenticated', fn () => '$token && $auth_checker->isGranted("IS_AUTHENTICATED_FULLY")', fn (array $variables) => $variables['token'] && $variables['auth_checker']->isGranted('IS_AUTHENTICATED_FULLY')),
 
-            new ExpressionFunction('is_fully_authenticated', function () {
-                return '$trust_resolver->isFullFledged($token)';
-            }, function (array $variables) {
-                return $variables['trust_resolver']->isFullFledged($variables['token']);
-            }),
+            new ExpressionFunction('is_granted', fn ($attributes, $object = 'null') => sprintf('$auth_checker->isGranted(%s, %s)', $attributes, $object), fn (array $variables, $attributes, $object = null) => $variables['auth_checker']->isGranted($attributes, $object)),
 
-            new ExpressionFunction('is_remember_me', function () {
-                return '$trust_resolver->isRememberMe($token)';
-            }, function (array $variables) {
-                return $variables['trust_resolver']->isRememberMe($variables['token']);
-            }),
-
-            new ExpressionFunction('has_role', function ($role) {
-                return sprintf('in_array(%s, $roles)', $role);
-            }, function (array $variables, $role) {
-                return \in_array($role, $variables['roles']);
-            }),
-        );
+            new ExpressionFunction('is_remember_me', fn () => '$token && $auth_checker->isGranted("IS_REMEMBERED")', fn (array $variables) => $variables['token'] && $variables['auth_checker']->isGranted('IS_REMEMBERED')),
+        ];
     }
 }

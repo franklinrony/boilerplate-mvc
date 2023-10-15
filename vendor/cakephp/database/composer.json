@@ -24,11 +24,15 @@
         "source": "https://github.com/cakephp/database"
     },
     "require": {
-        "php": ">=5.6.0",
-        "cakephp/cache": "^3.6.0",
-        "cakephp/core": "^3.6.0",
-        "cakephp/datasource": "^3.6.0",
-        "cakephp/log": "^3.6.0"
+        "php": ">=8.1",
+        "cakephp/core": "^5.0",
+        "cakephp/chronos": "^3.0",
+        "cakephp/datasource": "^5.0",
+        "psr/log": "^3.0"
+    },
+    "suggest": {
+        "cakephp/i18n": "If you are using locale-aware datetime formats.",
+        "cakephp/log": "If you want to use query logging without providing a logger yourself."
     },
     "autoload": {
         "psr-4": {

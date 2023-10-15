@@ -22,14 +22,15 @@ use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
  * @author Drak <drak@zikula.org>
  *
  * @runTestsInSeparateProcesses
+ *
  * @preserveGlobalState disabled
  */
 class NullSessionHandlerTest extends TestCase
 {
     public function testSaveHandlers()
     {
-        $storage = $this->getStorage();
-        $this->assertEquals('user', ini_get('session.save_handler'));
+        $this->getStorage();
+        $this->assertEquals('user', \ini_get('session.save_handler'));
     }
 
     public function testSession()

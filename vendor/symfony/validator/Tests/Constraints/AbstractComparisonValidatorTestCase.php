@@ -13,6 +13,9 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 
 use Symfony\Component\Intl\Util\IntlTestHelper;
 use Symfony\Component\Validator\Constraint;
+use Symfony\Component\Validator\Constraints\AbstractComparison;
+use Symfony\Component\Validator\Exception\ConstraintDefinitionException;
+use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
 class ComparisonTest_Class
 {
@@ -23,23 +26,24 @@ class ComparisonTest_Class
         $this->value = $value;
     }
 
-    public function __toString()
+    public function __toString(): string
     {
         return (string) $this->value;
+    }
+
+    public function getValue()
+    {
+        return $this->value;
     }
 }
 
 /**
  * @author Daniel Holmes <daniel@danielholmes.org>
  */
-abstract class AbstractComparisonValidatorTestCase extends AbstractConstraintValidatorTest
+abstract class AbstractComparisonValidatorTestCase extends ConstraintValidatorTestCase
 {
     protected static function addPhp5Dot5Comparisons(array $comparisons)
     {
-        if (\PHP_VERSION_ID < 50500) {
-            return $comparisons;
-        }
-
         $result = $comparisons;
 
         // Duplicate all tests involving DateTime objects to be tested with
@@ -49,10 +53,7 @@ abstract class AbstractComparisonValidatorTestCase extends AbstractConstraintVal
 
             foreach ($comparison as $i => $value) {
                 if ($value instanceof \DateTime) {
-                    $comparison[$i] = new \DateTimeImmutable(
-                        $value->format('Y-m-d H:i:s.u e'),
-                        $value->getTimezone()
-                    );
+                    $comparison[$i] = new \DateTimeImmutable($value->format('Y-m-d H:i:s.u e'));
                     $add = true;
                 } elseif ('DateTime' === $value) {
                     $comparison[$i] = 'DateTimeImmutable';
@@ -68,67 +69,107 @@ abstract class AbstractComparisonValidatorTestCase extends AbstractConstraintVal
         return $result;
     }
 
-    public function provideInvalidConstraintOptions()
+    public static function provideInvalidConstraintOptions()
     {
-        return array(
-            array(null),
-            array(array()),
-        );
+        return [
+            [null],
+            [[]],
+        ];
     }
 
     /**
      * @dataProvider provideInvalidConstraintOptions
-     * @expectedException \Symfony\Component\Validator\Exception\ConstraintDefinitionException
      */
-    public function testThrowsConstraintExceptionIfNoValueOrProperty($options)
+    public function testThrowsConstraintExceptionIfNoValueOrPropertyPath($options)
     {
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage('requires either the "value" or "propertyPath" option to be set.');
         $this->createConstraint($options);
+    }
+
+    public function testThrowsConstraintExceptionIfBothValueAndPropertyPath()
+    {
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage('requires only one of the "value" or "propertyPath" options to be set, not both.');
+        $this->createConstraint([
+            'value' => 'value',
+            'propertyPath' => 'propertyPath',
+        ]);
     }
 
     /**
      * @dataProvider provideAllValidComparisons
-     *
-     * @param mixed $dirtyValue
-     * @param mixed $comparisonValue
      */
     public function testValidComparisonToValue($dirtyValue, $comparisonValue)
     {
-        $constraint = $this->createConstraint(array('value' => $comparisonValue));
+        $constraint = $this->createConstraint(['value' => $comparisonValue]);
 
         $this->validator->validate($dirtyValue, $constraint);
 
         $this->assertNoViolation();
     }
 
-    /**
-     * @return array
-     */
-    public function provideAllValidComparisons()
+    public static function provideAllValidComparisons(): array
     {
         // The provider runs before setUp(), so we need to manually fix
         // the default timezone
-        $this->setDefaultTimezone('UTC');
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('UTC');
 
-        $comparisons = self::addPhp5Dot5Comparisons($this->provideValidComparisons());
+        $comparisons = self::addPhp5Dot5Comparisons(static::provideValidComparisons());
 
-        $this->restoreDefaultTimezone();
+        date_default_timezone_set($timezone);
 
         return $comparisons;
     }
 
     /**
-     * @return array
+     * @dataProvider provideValidComparisonsToPropertyPath
      */
-    abstract public function provideValidComparisons();
+    public function testValidComparisonToPropertyPath($comparedValue)
+    {
+        $constraint = $this->createConstraint(['propertyPath' => 'value']);
+
+        $object = new ComparisonTest_Class(5);
+
+        $this->setObject($object);
+
+        $this->validator->validate($comparedValue, $constraint);
+
+        $this->assertNoViolation();
+    }
+
+    public function testNoViolationOnNullObjectWithPropertyPath()
+    {
+        $constraint = $this->createConstraint(['propertyPath' => 'propertyPath']);
+
+        $this->setObject(null);
+
+        $this->validator->validate('some data', $constraint);
+
+        $this->assertNoViolation();
+    }
+
+    public function testInvalidValuePath()
+    {
+        $constraint = $this->createConstraint(['propertyPath' => 'foo']);
+
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage(sprintf('Invalid property path "foo" provided to "%s" constraint', $constraint::class));
+
+        $object = new ComparisonTest_Class(5);
+
+        $this->setObject($object);
+
+        $this->validator->validate(5, $constraint);
+    }
+
+    abstract public static function provideValidComparisons(): array;
+
+    abstract public static function provideValidComparisonsToPropertyPath(): array;
 
     /**
      * @dataProvider provideAllInvalidComparisons
-     *
-     * @param mixed  $dirtyValue
-     * @param mixed  $dirtyValueAsString
-     * @param mixed  $comparedValue
-     * @param mixed  $comparedValueString
-     * @param string $comparedValueType
      */
     public function testInvalidComparisonToValue($dirtyValue, $dirtyValueAsString, $comparedValue, $comparedValueString, $comparedValueType)
     {
@@ -136,13 +177,9 @@ abstract class AbstractComparisonValidatorTestCase extends AbstractConstraintVal
         // Make sure we have the correct version loaded
         if ($dirtyValue instanceof \DateTime || $dirtyValue instanceof \DateTimeInterface) {
             IntlTestHelper::requireIntl($this, '57.1');
-
-            if (\PHP_VERSION_ID < 50304 && !(extension_loaded('intl') && method_exists('IntlDateFormatter', 'setTimeZone'))) {
-                $this->markTestSkipped('Intl supports formatting DateTime objects since 5.3.4');
-            }
         }
 
-        $constraint = $this->createConstraint(array('value' => $comparedValue));
+        $constraint = $this->createConstraint(['value' => $comparedValue]);
         $constraint->message = 'Constraint Message';
 
         $this->validator->validate($dirtyValue, $constraint);
@@ -151,34 +188,105 @@ abstract class AbstractComparisonValidatorTestCase extends AbstractConstraintVal
             ->setParameter('{{ value }}', $dirtyValueAsString)
             ->setParameter('{{ compared_value }}', $comparedValueString)
             ->setParameter('{{ compared_value_type }}', $comparedValueType)
+            ->setCode($this->getErrorCode())
+            ->assertRaised();
+    }
+
+    public function testInvalidComparisonToPropertyPathAddsPathAsParameter()
+    {
+        [$dirtyValue, $dirtyValueAsString, $comparedValue, $comparedValueString, $comparedValueType] = current($this->provideAllInvalidComparisons());
+
+        $constraint = $this->createConstraint(['propertyPath' => 'value']);
+        $constraint->message = 'Constraint Message';
+
+        $object = new ComparisonTest_Class($comparedValue);
+
+        $this->setObject($object);
+
+        $this->validator->validate($dirtyValue, $constraint);
+
+        $this->buildViolation('Constraint Message')
+            ->setParameter('{{ value }}', $dirtyValueAsString)
+            ->setParameter('{{ compared_value }}', $comparedValueString)
+            ->setParameter('{{ compared_value_path }}', 'value')
+            ->setParameter('{{ compared_value_type }}', $comparedValueType)
+            ->setCode($this->getErrorCode())
             ->assertRaised();
     }
 
     /**
-     * @return array
+     * @dataProvider throwsOnInvalidStringDatesProvider
      */
-    public function provideAllInvalidComparisons()
+    public function testThrowsOnInvalidStringDates(AbstractComparison $constraint, $expectedMessage, $value)
+    {
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage($expectedMessage);
+
+        $this->validator->validate($value, $constraint);
+    }
+
+    public static function throwsOnInvalidStringDatesProvider(): array
+    {
+        $constraint = static::createConstraint([
+            'value' => 'foo',
+        ]);
+
+        $constraintClass = $constraint::class;
+
+        return [
+            [$constraint, sprintf('The compared value "foo" could not be converted to a "DateTimeImmutable" instance in the "%s" constraint.', $constraintClass), new \DateTimeImmutable()],
+            [$constraint, sprintf('The compared value "foo" could not be converted to a "DateTime" instance in the "%s" constraint.', $constraintClass), new \DateTime()],
+        ];
+    }
+
+    /**
+     * @dataProvider provideComparisonsToNullValueAtPropertyPath
+     */
+    public function testCompareWithNullValueAtPropertyAt($dirtyValue, $dirtyValueAsString, $isValid)
+    {
+        $constraint = $this->createConstraint(['propertyPath' => 'value']);
+        $constraint->message = 'Constraint Message';
+
+        $object = new ComparisonTest_Class(null);
+        $this->setObject($object);
+
+        $this->validator->validate($dirtyValue, $constraint);
+
+        if ($isValid) {
+            $this->assertNoViolation();
+        } else {
+            $this->buildViolation('Constraint Message')
+                ->setParameter('{{ value }}', $dirtyValueAsString)
+                ->setParameter('{{ compared_value }}', 'null')
+                ->setParameter('{{ compared_value_type }}', 'null')
+                ->setParameter('{{ compared_value_path }}', 'value')
+                ->setCode($this->getErrorCode())
+                ->assertRaised();
+        }
+    }
+
+    public static function provideAllInvalidComparisons(): array
     {
         // The provider runs before setUp(), so we need to manually fix
         // the default timezone
-        $this->setDefaultTimezone('UTC');
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('UTC');
 
-        $comparisons = self::addPhp5Dot5Comparisons($this->provideInvalidComparisons());
+        $comparisons = self::addPhp5Dot5Comparisons(static::provideInvalidComparisons());
 
-        $this->restoreDefaultTimezone();
+        date_default_timezone_set($timezone);
 
         return $comparisons;
     }
 
-    /**
-     * @return array
-     */
-    abstract public function provideInvalidComparisons();
+    abstract public static function provideInvalidComparisons(): array;
 
-    /**
-     * @param array|null $options Options for the constraint
-     *
-     * @return Constraint
-     */
-    abstract protected function createConstraint(array $options = null);
+    abstract public static function provideComparisonsToNullValueAtPropertyPath();
+
+    abstract protected static function createConstraint(array $options = null): Constraint;
+
+    protected function getErrorCode(): ?string
+    {
+        return null;
+    }
 }

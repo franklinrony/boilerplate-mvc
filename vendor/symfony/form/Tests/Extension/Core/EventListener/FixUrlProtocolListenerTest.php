@@ -12,57 +12,68 @@
 namespace Symfony\Component\Form\Tests\Extension\Core\EventListener;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Form\FormEvent;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\Form\Extension\Core\EventListener\FixUrlProtocolListener;
+use Symfony\Component\Form\Form;
+use Symfony\Component\Form\FormConfigBuilder;
+use Symfony\Component\Form\FormEvent;
 
 class FixUrlProtocolListenerTest extends TestCase
 {
-    public function testFixHttpUrl()
+    /**
+     * @dataProvider provideUrlToFix
+     */
+    public function testFixUrl($data)
     {
-        $data = 'www.symfony.com';
-        $form = $this->getMockBuilder('Symfony\Component\Form\Test\FormInterface')->getMock();
+        $form = new Form(new FormConfigBuilder('name', null, new EventDispatcher()));
         $event = new FormEvent($form, $data);
 
         $filter = new FixUrlProtocolListener('http');
         $filter->onSubmit($event);
 
-        $this->assertEquals('http://www.symfony.com', $event->getData());
+        $this->assertSame('http://'.$data, $event->getData());
     }
 
-    public function testSkipKnownUrl()
+    public static function provideUrlToFix()
     {
-        $data = 'http://www.symfony.com';
-        $form = $this->getMockBuilder('Symfony\Component\Form\Test\FormInterface')->getMock();
-        $event = new FormEvent($form, $data);
-
-        $filter = new FixUrlProtocolListener('http');
-        $filter->onSubmit($event);
-
-        $this->assertEquals('http://www.symfony.com', $event->getData());
-    }
-
-    public function provideUrlsWithSupportedProtocols()
-    {
-        return array(
-            array('ftp://www.symfony.com'),
-            array('chrome-extension://foo'),
-            array('h323://foo'),
-            array('iris.beep://foo'),
-            array('foo+bar://foo'),
-        );
+        return [
+            ['www.symfony.com'],
+            ['symfony.com/doc'],
+            ['twitter.com/@symfony'],
+            ['symfony.com?foo@bar'],
+            ['symfony.com#foo@bar'],
+            ['localhost'],
+        ];
     }
 
     /**
-     * @dataProvider provideUrlsWithSupportedProtocols
+     * @dataProvider provideUrlToSkip
      */
-    public function testSkipOtherProtocol($url)
+    public function testSkipUrl($url)
     {
-        $form = $this->getMockBuilder('Symfony\Component\Form\Test\FormInterface')->getMock();
+        $form = new Form(new FormConfigBuilder('name', null, new EventDispatcher()));
         $event = new FormEvent($form, $url);
 
         $filter = new FixUrlProtocolListener('http');
         $filter->onSubmit($event);
 
-        $this->assertEquals($url, $event->getData());
+        $this->assertSame($url, $event->getData());
+    }
+
+    public static function provideUrlToSkip()
+    {
+        return [
+            ['http://www.symfony.com'],
+            ['ftp://www.symfony.com'],
+            ['https://twitter.com/@symfony'],
+            ['chrome-extension://foo'],
+            ['h323://foo'],
+            ['iris.beep://foo'],
+            ['foo+bar://foo'],
+            ['fabien@symfony.com'],
+            ['//relative/url'],
+            ['/relative/url'],
+            ['./relative/url'],
+        ];
     }
 }

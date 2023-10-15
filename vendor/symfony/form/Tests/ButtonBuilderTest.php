@@ -13,22 +13,22 @@ namespace Symfony\Component\Form\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Form\ButtonBuilder;
+use Symfony\Component\Form\Exception\InvalidArgumentException;
 
 /**
  * @author Alexander Cheprasov <cheprasov.84@ya.ru>
  */
 class ButtonBuilderTest extends TestCase
 {
-    public function getValidNames()
+    public static function getValidNames()
     {
-        return array(
-            array('reset'),
-            array('submit'),
-            array('foo'),
-            array('0'),
-            array(0),
-            array('button[]'),
-        );
+        return [
+            ['reset'],
+            ['submit'],
+            ['foo'],
+            ['0'],
+            [0],
+        ];
     }
 
     /**
@@ -36,16 +36,24 @@ class ButtonBuilderTest extends TestCase
      */
     public function testValidNames($name)
     {
-        $this->assertInstanceOf('\Symfony\Component\Form\ButtonBuilder', new ButtonBuilder($name));
+        $this->assertInstanceOf(ButtonBuilder::class, new ButtonBuilder($name));
     }
 
-    public function getInvalidNames()
+    public function testNameContainingIllegalCharacters()
     {
-        return array(
-            array(''),
-            array(false),
-            array(null),
-        );
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('The name "button[]" contains illegal characters. Names should start with a letter, digit or underscore and only contain letters, digits, numbers, underscores ("_"), hyphens ("-") and colons (":").');
+
+        $this->assertInstanceOf(ButtonBuilder::class, new ButtonBuilder('button[]'));
+    }
+
+    public static function getInvalidNames()
+    {
+        return [
+            [''],
+            [false],
+            [null],
+        ];
     }
 
     /**
@@ -53,10 +61,8 @@ class ButtonBuilderTest extends TestCase
      */
     public function testInvalidNames($name)
     {
-        $this->{method_exists($this, $_ = 'expectException') ? $_ : 'setExpectedException'}(
-            '\Symfony\Component\Form\Exception\InvalidArgumentException',
-            'Buttons cannot have empty names.'
-        );
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Buttons cannot have empty names.');
         new ButtonBuilder($name);
     }
 }

@@ -26,7 +26,7 @@ class YamlReferenceDumperTest extends TestCase
         $this->assertEquals($this->getConfigurationAsString(), $dumper->dump($configuration));
     }
 
-    public function provideDumpAtPath()
+    public static function provideDumpAtPath(): array
     {
         return [
             'Regular node' => ['scalar_true', <<<EOL
@@ -42,7 +42,7 @@ array:
     # this is a long
     # multi-line info text
     # which should be indented
-    child3:               ~ # Example: example setting
+    child3:               ~ # Example: 'example setting'
 EOL
             ],
             'Regular nested' => ['array.child2', <<<EOL
@@ -72,7 +72,7 @@ EOL
     /**
      * @dataProvider provideDumpAtPath
      */
-    public function testDumpAtPath($path, $expected)
+    public function testDumpAtPath(string $path, string $expected)
     {
         $configuration = new ExampleConfiguration();
 
@@ -81,7 +81,7 @@ EOL
         $this->assertSame(trim($expected), trim($dumper->dumpAtPath($configuration, $path)));
     }
 
-    private function getConfigurationAsString()
+    private function getConfigurationAsString(): string
     {
         return <<<'EOL'
 acme_root:
@@ -98,11 +98,11 @@ acme_root:
         - elem1
         - elem2
     scalar_required:      ~ # Required
-    scalar_deprecated:    ~ # Deprecated (The child node "scalar_deprecated" at path "acme_root" is deprecated.)
-    scalar_deprecated_with_message: ~ # Deprecated (Deprecation custom message for "scalar_deprecated_with_message" at "acme_root")
+    scalar_deprecated:    ~ # Deprecated (Since vendor/package 1.1: The child node "scalar_deprecated" at path "acme_root" is deprecated.)
+    scalar_deprecated_with_message: ~ # Deprecated (Since vendor/package 1.1: Deprecation custom message for "scalar_deprecated_with_message" at "acme_root")
     node_with_a_looong_name: ~
     enum_with_default:    this # One of "this"; "that"
-    enum:                 ~ # One of "this"; "that"
+    enum:                 ~ # One of "this"; "that"; Symfony\Component\Config\Tests\Fixtures\TestEnum::Ccc
 
     # some info
     array:
@@ -112,8 +112,13 @@ acme_root:
         # this is a long
         # multi-line info text
         # which should be indented
-        child3:               ~ # Example: example setting
+        child3:               ~ # Example: 'example setting'
     scalar_prototyped:    []
+    variable:
+
+        # Examples:
+        - foo
+        - bar
     parameters:
 
         # Prototype: Parameter name
@@ -137,6 +142,7 @@ acme_root:
 
         # Prototype
         name:                 []
+    custom_node:          true
 
 EOL;
     }

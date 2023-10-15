@@ -12,27 +12,18 @@
 namespace Symfony\Component\Translation\Tests\Dumper;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Translation\MessageCatalogue;
 use Symfony\Component\Translation\Dumper\IcuResFileDumper;
+use Symfony\Component\Translation\MessageCatalogue;
 
 class IcuResFileDumperTest extends TestCase
 {
-    /**
-     * @requires extension mbstring
-     */
-    public function testDump()
+    public function testFormatCatalogue()
     {
         $catalogue = new MessageCatalogue('en');
-        $catalogue->add(array('foo' => 'bar'));
+        $catalogue->add(['foo' => 'bar']);
 
-        $tempDir = sys_get_temp_dir().'/IcuResFileDumperTest';
         $dumper = new IcuResFileDumper();
-        $dumper->dump($catalogue, array('path' => $tempDir));
 
-        $this->assertFileEquals(__DIR__.'/../fixtures/resourcebundle/res/en.res', $tempDir.'/messages/en.res');
-
-        @unlink($tempDir.'/messages/en.res');
-        @rmdir($tempDir.'/messages');
-        @rmdir($tempDir);
+        $this->assertStringEqualsFile(__DIR__.'/../fixtures/resourcebundle/res/en.res', $dumper->formatCatalogue($catalogue, 'messages'));
     }
 }

@@ -11,15 +11,23 @@
 
 namespace Symfony\Bridge\Twig\Command;
 
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\CI\GithubActionReporter;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Completion\CompletionInput;
+use Symfony\Component\Console\Completion\CompletionSuggestions;
+use Symfony\Component\Console\Exception\InvalidArgumentException;
+use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Finder\Finder;
 use Twig\Environment;
 use Twig\Error\Error;
 use Twig\Loader\ArrayLoader;
+use Twig\Loader\FilesystemLoader;
 use Twig\Source;
 
 /**
@@ -28,45 +36,34 @@ use Twig\Source;
  * @author Marc Weistroff <marc.weistroff@sensiolabs.com>
  * @author Jérôme Tamarelle <jerome@tamarelle.net>
  */
+#[AsCommand(name: 'lint:twig', description: 'Lint a Twig template and outputs encountered errors')]
 class LintCommand extends Command
 {
-    private $twig;
+    private string $format;
 
-    /**
-     * {@inheritdoc}
-     */
-    public function __construct($name = 'lint:twig')
-    {
-        parent::__construct($name);
-    }
-
-    public function setTwigEnvironment(Environment $twig)
-    {
-        $this->twig = $twig;
+    public function __construct(
+        private Environment $twig,
+        private array $namePatterns = ['*.twig'],
+    ) {
+        parent::__construct();
     }
 
     /**
-     * @return Environment $twig
+     * @return void
      */
-    protected function getTwigEnvironment()
-    {
-        return $this->twig;
-    }
-
     protected function configure()
     {
         $this
-            ->setAliases(array('twig:lint'))
-            ->setDescription('Lints a template and outputs encountered errors')
-            ->addOption('format', null, InputOption::VALUE_REQUIRED, 'The output format', 'txt')
-            ->addArgument('filename', InputArgument::IS_ARRAY)
+            ->addOption('format', null, InputOption::VALUE_REQUIRED, sprintf('The output format ("%s")', implode('", "', $this->getAvailableFormatOptions())))
+            ->addOption('show-deprecations', null, InputOption::VALUE_NONE, 'Show deprecations as errors')
+            ->addArgument('filename', InputArgument::IS_ARRAY, 'A file, a directory or "-" for reading from STDIN')
             ->setHelp(<<<'EOF'
 The <info>%command.name%</info> command lints a template and outputs to STDOUT
 the first encountered syntax error.
 
 You can validate the syntax of contents passed from STDIN:
 
-  <info>cat filename | php %command.full_name%</info>
+  <info>cat filename | php %command.full_name% -</info>
 
 Or the syntax of a file:
 
@@ -82,112 +79,133 @@ EOF
         ;
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        if (false !== strpos($input->getFirstArgument(), ':l')) {
-            $output->writeln('<comment>The use of "twig:lint" command is deprecated since version 2.7 and will be removed in 3.0. Use the "lint:twig" instead.</comment>');
-        }
-
-        $twig = $this->getTwigEnvironment();
-
-        if (null === $twig) {
-            $output->writeln('<error>The Twig environment needs to be set.</error>');
-
-            return 1;
-        }
-
+        $io = new SymfonyStyle($input, $output);
         $filenames = $input->getArgument('filename');
+        $showDeprecations = $input->getOption('show-deprecations');
+        $this->format = $input->getOption('format') ?? (GithubActionReporter::isGithubActionEnvironment() ? 'github' : 'txt');
 
-        if (0 === count($filenames)) {
-            if (0 !== ftell(STDIN)) {
-                throw new \RuntimeException('Please provide a filename or pipe template content to STDIN.');
-            }
-
-            $template = '';
-            while (!feof(STDIN)) {
-                $template .= fread(STDIN, 1024);
-            }
-
-            return $this->display($input, $output, array($this->validate($twig, $template, uniqid('sf_', true))));
+        if (['-'] === $filenames) {
+            return $this->display($input, $output, $io, [$this->validate(file_get_contents('php://stdin'), uniqid('sf_', true))]);
         }
 
-        $filesInfo = $this->getFilesInfo($twig, $filenames);
+        if (!$filenames) {
+            $loader = $this->twig->getLoader();
+            if ($loader instanceof FilesystemLoader) {
+                $paths = [];
+                foreach ($loader->getNamespaces() as $namespace) {
+                    $paths[] = $loader->getPaths($namespace);
+                }
+                $filenames = array_merge(...$paths);
+            }
 
-        return $this->display($input, $output, $filesInfo);
+            if (!$filenames) {
+                throw new RuntimeException('Please provide a filename or pipe template content to STDIN.');
+            }
+        }
+
+        if ($showDeprecations) {
+            $prevErrorHandler = set_error_handler(static function ($level, $message, $file, $line) use (&$prevErrorHandler) {
+                if (\E_USER_DEPRECATED === $level) {
+                    $templateLine = 0;
+                    if (preg_match('/ at line (\d+)[ .]/', $message, $matches)) {
+                        $templateLine = $matches[1];
+                    }
+
+                    throw new Error($message, $templateLine);
+                }
+
+                return $prevErrorHandler ? $prevErrorHandler($level, $message, $file, $line) : false;
+            });
+        }
+
+        try {
+            $filesInfo = $this->getFilesInfo($filenames);
+        } finally {
+            if ($showDeprecations) {
+                restore_error_handler();
+            }
+        }
+
+        return $this->display($input, $output, $io, $filesInfo);
     }
 
-    private function getFilesInfo(Environment $twig, array $filenames)
+    private function getFilesInfo(array $filenames): array
     {
-        $filesInfo = array();
+        $filesInfo = [];
         foreach ($filenames as $filename) {
             foreach ($this->findFiles($filename) as $file) {
-                $filesInfo[] = $this->validate($twig, file_get_contents($file), $file);
+                $filesInfo[] = $this->validate(file_get_contents($file), $file);
             }
         }
 
         return $filesInfo;
     }
 
-    protected function findFiles($filename)
+    protected function findFiles(string $filename): iterable
     {
         if (is_file($filename)) {
-            return array($filename);
+            return [$filename];
         } elseif (is_dir($filename)) {
-            return Finder::create()->files()->in($filename)->name('*.twig');
+            return Finder::create()->files()->in($filename)->name($this->namePatterns);
         }
 
-        throw new \RuntimeException(sprintf('File or directory "%s" is not readable', $filename));
+        throw new RuntimeException(sprintf('File or directory "%s" is not readable.', $filename));
     }
 
-    private function validate(Environment $twig, $template, $file)
+    private function validate(string $template, string $file): array
     {
-        $realLoader = $twig->getLoader();
+        $realLoader = $this->twig->getLoader();
         try {
-            $temporaryLoader = new ArrayLoader(array((string) $file => $template));
-            $twig->setLoader($temporaryLoader);
-            $nodeTree = $twig->parse($twig->tokenize(new Source($template, (string) $file)));
-            $twig->compile($nodeTree);
-            $twig->setLoader($realLoader);
+            $temporaryLoader = new ArrayLoader([$file => $template]);
+            $this->twig->setLoader($temporaryLoader);
+            $nodeTree = $this->twig->parse($this->twig->tokenize(new Source($template, $file)));
+            $this->twig->compile($nodeTree);
+            $this->twig->setLoader($realLoader);
         } catch (Error $e) {
-            $twig->setLoader($realLoader);
+            $this->twig->setLoader($realLoader);
 
-            return array('template' => $template, 'file' => $file, 'valid' => false, 'exception' => $e);
+            return ['template' => $template, 'file' => $file, 'line' => $e->getTemplateLine(), 'valid' => false, 'exception' => $e];
         }
 
-        return array('template' => $template, 'file' => $file, 'valid' => true);
+        return ['template' => $template, 'file' => $file, 'valid' => true];
     }
 
-    private function display(InputInterface $input, OutputInterface $output, $files)
+    private function display(InputInterface $input, OutputInterface $output, SymfonyStyle $io, array $files): int
     {
-        switch ($input->getOption('format')) {
-            case 'txt':
-                return $this->displayTxt($output, $files);
-            case 'json':
-                return $this->displayJson($output, $files);
-            default:
-                throw new \InvalidArgumentException(sprintf('The format "%s" is not supported.', $input->getOption('format')));
-        }
+        return match ($this->format) {
+            'txt' => $this->displayTxt($output, $io, $files),
+            'json' => $this->displayJson($output, $files),
+            'github' => $this->displayTxt($output, $io, $files, true),
+            default => throw new InvalidArgumentException(sprintf('Supported formats are "%s".', implode('", "', $this->getAvailableFormatOptions()))),
+        };
     }
 
-    private function displayTxt(OutputInterface $output, $filesInfo)
+    private function displayTxt(OutputInterface $output, SymfonyStyle $io, array $filesInfo, bool $errorAsGithubAnnotations = false): int
     {
         $errors = 0;
+        $githubReporter = $errorAsGithubAnnotations ? new GithubActionReporter($output) : null;
 
         foreach ($filesInfo as $info) {
             if ($info['valid'] && $output->isVerbose()) {
-                $output->writeln('<info>OK</info>'.($info['file'] ? sprintf(' in %s', $info['file']) : ''));
+                $io->comment('<info>OK</info>'.($info['file'] ? sprintf(' in %s', $info['file']) : ''));
             } elseif (!$info['valid']) {
                 ++$errors;
-                $this->renderException($output, $info['template'], $info['exception'], $info['file']);
+                $this->renderException($io, $info['template'], $info['exception'], $info['file'], $githubReporter);
             }
         }
 
-        $output->writeln(sprintf('<comment>%d/%d valid files</comment>', count($filesInfo) - $errors, count($filesInfo)));
+        if (0 === $errors) {
+            $io->success(sprintf('All %d Twig files contain valid syntax.', \count($filesInfo)));
+        } else {
+            $io->warning(sprintf('%d Twig files have valid syntax and %d contain errors.', \count($filesInfo) - $errors, $errors));
+        }
 
         return min($errors, 1);
     }
 
-    private function displayJson(OutputInterface $output, $filesInfo)
+    private function displayJson(OutputInterface $output, array $filesInfo): int
     {
         $errors = 0;
 
@@ -201,47 +219,69 @@ EOF
             }
         });
 
-        $output->writeln(json_encode($filesInfo, defined('JSON_PRETTY_PRINT') ? JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES : 0));
+        $output->writeln(json_encode($filesInfo, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES));
 
         return min($errors, 1);
     }
 
-    private function renderException(OutputInterface $output, $template, Error $exception, $file = null)
+    private function renderException(SymfonyStyle $output, string $template, Error $exception, string $file = null, GithubActionReporter $githubReporter = null): void
     {
         $line = $exception->getTemplateLine();
 
+        $githubReporter?->error($exception->getRawMessage(), $file, $line <= 0 ? null : $line);
+
         if ($file) {
-            $output->writeln(sprintf('<error>KO</error> in %s (line %s)', $file, $line));
+            $output->text(sprintf('<error> ERROR </error> in %s (line %s)', $file, $line));
         } else {
-            $output->writeln(sprintf('<error>KO</error> (line %s)', $line));
+            $output->text(sprintf('<error> ERROR </error> (line %s)', $line));
         }
 
-        foreach ($this->getContext($template, $line) as $no => $code) {
-            $output->writeln(sprintf(
+        // If the line is not known (this might happen for deprecations if we fail at detecting the line for instance),
+        // we render the message without context, to ensure the message is displayed.
+        if ($line <= 0) {
+            $output->text(sprintf('<error> >> %s</error> ', $exception->getRawMessage()));
+
+            return;
+        }
+
+        foreach ($this->getContext($template, $line) as $lineNumber => $code) {
+            $output->text(sprintf(
                 '%s %-6s %s',
-                $no == $line ? '<error>>></error>' : '  ',
-                $no,
+                $lineNumber === $line ? '<error> >> </error>' : '    ',
+                $lineNumber,
                 $code
             ));
-            if ($no == $line) {
-                $output->writeln(sprintf('<error>>> %s</error> ', $exception->getRawMessage()));
+            if ($lineNumber === $line) {
+                $output->text(sprintf('<error> >> %s</error> ', $exception->getRawMessage()));
             }
         }
     }
 
-    private function getContext($template, $line, $context = 3)
+    private function getContext(string $template, int $line, int $context = 3): array
     {
         $lines = explode("\n", $template);
 
         $position = max(0, $line - $context);
-        $max = min(count($lines), $line - 1 + $context);
+        $max = min(\count($lines), $line - 1 + $context);
 
-        $result = array();
+        $result = [];
         while ($position < $max) {
             $result[$position + 1] = $lines[$position];
             ++$position;
         }
 
         return $result;
+    }
+
+    public function complete(CompletionInput $input, CompletionSuggestions $suggestions): void
+    {
+        if ($input->mustSuggestOptionValuesFor('format')) {
+            $suggestions->suggestValues($this->getAvailableFormatOptions());
+        }
+    }
+
+    private function getAvailableFormatOptions(): array
+    {
+        return ['txt', 'json', 'github'];
     }
 }

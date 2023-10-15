@@ -19,8 +19,8 @@ namespace Symfony\Component\Form\Guess;
  */
 class TypeGuess extends Guess
 {
-    private $type;
-    private $options;
+    private string $type;
+    private array $options;
 
     /**
      * @param string $type       The guessed field type
@@ -29,7 +29,7 @@ class TypeGuess extends Guess
      * @param int    $confidence The confidence that the guessed class name
      *                           is correct
      */
-    public function __construct($type, array $options, $confidence)
+    public function __construct(string $type, array $options, int $confidence)
     {
         parent::__construct($confidence);
 
@@ -39,20 +39,16 @@ class TypeGuess extends Guess
 
     /**
      * Returns the guessed field type.
-     *
-     * @return string
      */
-    public function getType()
+    public function getType(): string
     {
         return $this->type;
     }
 
     /**
      * Returns the guessed options for creating instances of the guessed type.
-     *
-     * @return array
      */
-    public function getOptions()
+    public function getOptions(): array
     {
         return $this->options;
     }

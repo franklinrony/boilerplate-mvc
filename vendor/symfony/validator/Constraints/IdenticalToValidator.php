@@ -15,14 +15,17 @@ namespace Symfony\Component\Validator\Constraints;
  * Validates values are identical (===).
  *
  * @author Daniel Holmes <daniel@danielholmes.org>
+ * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class IdenticalToValidator extends AbstractComparisonValidator
 {
-    /**
-     * {@inheritdoc}
-     */
-    protected function compareValues($value1, $value2)
+    protected function compareValues(mixed $value1, mixed $value2): bool
     {
         return $value1 === $value2;
+    }
+
+    protected function getErrorCode(): ?string
+    {
+        return IdenticalTo::NOT_IDENTICAL_ERROR;
     }
 }

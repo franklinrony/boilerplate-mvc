@@ -12,6 +12,7 @@
 namespace Symfony\Component\Security\Core\Tests\Resources;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Translation\Util\XliffUtils;
 
 class TranslationFilesTest extends TestCase
 {
@@ -20,28 +21,40 @@ class TranslationFilesTest extends TestCase
      */
     public function testTranslationFileIsValid($filePath)
     {
-        if (class_exists('PHPUnit_Util_XML')) {
-            \PHPUnit_Util_XML::loadfile($filePath, false, false, true);
-        } else {
-            \PHPUnit\Util\XML::loadfile($filePath, false, false, true);
-        }
+        $document = new \DOMDocument();
+        $document->loadXML(file_get_contents($filePath));
 
-        $this->addToAssertionCount(1);
+        $errors = XliffUtils::validateSchema($document);
+
+        $this->assertCount(0, $errors, sprintf('"%s" is invalid:%s', $filePath, \PHP_EOL.implode(\PHP_EOL, array_column($errors, 'message'))));
     }
 
-    public function provideTranslationFiles()
+    /**
+     * @dataProvider provideTranslationFiles
+     */
+    public function testTranslationFileIsValidWithoutEntityLoader($filePath)
+    {
+        $document = new \DOMDocument();
+        $document->loadXML(file_get_contents($filePath));
+
+        $errors = XliffUtils::validateSchema($document);
+
+        $this->assertCount(0, $errors, sprintf('"%s" is invalid:%s', $filePath, \PHP_EOL.implode(\PHP_EOL, array_column($errors, 'message'))));
+    }
+
+    public static function provideTranslationFiles()
     {
         return array_map(
-            function ($filePath) { return (array) $filePath; },
-            glob(\dirname(\dirname(__DIR__)).'/Resources/translations/*.xlf')
+            fn ($filePath) => (array) $filePath,
+            glob(\dirname(__DIR__, 2).'/Resources/translations/*.xlf')
         );
     }
 
     public function testNorwegianAlias()
     {
         $this->assertFileEquals(
-            \dirname(\dirname(__DIR__)).'/Resources/translations/security.nb.xlf',
-            \dirname(\dirname(__DIR__)).'/Resources/translations/security.no.xlf',
+            \dirname(__DIR__, 2).'/Resources/translations/security.nb.xlf',
+            \dirname(__DIR__, 2).'/Resources/translations/security.no.xlf',
             'The NO locale should be an alias for the NB variant of the Norwegian language.'
         );
     }

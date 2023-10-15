@@ -12,8 +12,8 @@
 namespace Symfony\Component\Validator\Mapping;
 
 use Symfony\Component\Validator\Constraint;
+use Symfony\Component\Validator\Constraints\Composite;
 use Symfony\Component\Validator\Exception\ConstraintDefinitionException;
-use Symfony\Component\Validator\ValidationVisitorInterface;
 
 /**
  * Stores all metadata needed for validating a class property.
@@ -27,7 +27,7 @@ use Symfony\Component\Validator\ValidationVisitorInterface;
  *
  * @see PropertyMetadataInterface
  */
-abstract class MemberMetadata extends ElementMetadata implements PropertyMetadataInterface
+abstract class MemberMetadata extends GenericMetadata implements PropertyMetadataInterface
 {
     /**
      * @internal This property is public in order to reduce the size of the
@@ -53,184 +53,89 @@ abstract class MemberMetadata extends ElementMetadata implements PropertyMetadat
     /**
      * @var \ReflectionMethod[]|\ReflectionProperty[]
      */
-    private $reflMember = array();
+    private array $reflMember = [];
 
     /**
      * @param string $class    The name of the class this member is defined on
      * @param string $name     The name of the member
      * @param string $property The property the member belongs to
      */
-    public function __construct($class, $name, $property)
+    public function __construct(string $class, string $name, string $property)
     {
         $this->class = $class;
         $this->name = $name;
         $this->property = $property;
     }
 
-    /**
-     * {@inheritdoc}
-     *
-     * @deprecated since version 2.5, to be removed in 3.0.
-     */
-    public function accept(ValidationVisitorInterface $visitor, $value, $group, $propertyPath, $propagatedGroup = null)
+    public function addConstraint(Constraint $constraint): static
     {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.5 and will be removed in 3.0.', E_USER_DEPRECATED);
-
-        $visitor->visit($this, $value, $group, $propertyPath);
-
-        if ($this->isCascaded()) {
-            $visitor->validate($value, $propagatedGroup ?: $group, $propertyPath, $this->isCollectionCascaded(), $this->isCollectionCascadedDeeply());
-        }
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function addConstraint(Constraint $constraint)
-    {
-        if (!in_array(Constraint::PROPERTY_CONSTRAINT, (array) $constraint->getTargets())) {
-            throw new ConstraintDefinitionException(sprintf(
-                'The constraint %s cannot be put on properties or getters',
-                get_class($constraint)
-            ));
-        }
+        $this->checkConstraint($constraint);
 
         parent::addConstraint($constraint);
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function __sleep()
+    public function __sleep(): array
     {
-        return array_merge(parent::__sleep(), array(
+        return array_merge(parent::__sleep(), [
             'class',
             'name',
             'property',
-        ));
+        ]);
     }
 
     /**
      * Returns the name of the member.
-     *
-     * @return string
      */
-    public function getName()
+    public function getName(): string
     {
         return $this->name;
     }
 
     /**
-     * {@inheritdoc}
+     * @return string
      */
     public function getClassName()
     {
         return $this->class;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getPropertyName()
+    public function getPropertyName(): string
     {
         return $this->property;
     }
 
     /**
      * Returns whether this member is public.
-     *
-     * @param object|string $objectOrClassName The object or the class name
-     *
-     * @return bool
      */
-    public function isPublic($objectOrClassName)
+    public function isPublic(object|string $objectOrClassName): bool
     {
         return $this->getReflectionMember($objectOrClassName)->isPublic();
     }
 
     /**
      * Returns whether this member is protected.
-     *
-     * @param object|string $objectOrClassName The object or the class name
-     *
-     * @return bool
      */
-    public function isProtected($objectOrClassName)
+    public function isProtected(object|string $objectOrClassName): bool
     {
         return $this->getReflectionMember($objectOrClassName)->isProtected();
     }
 
     /**
      * Returns whether this member is private.
-     *
-     * @param object|string $objectOrClassName The object or the class name
-     *
-     * @return bool
      */
-    public function isPrivate($objectOrClassName)
+    public function isPrivate(object|string $objectOrClassName): bool
     {
         return $this->getReflectionMember($objectOrClassName)->isPrivate();
     }
 
     /**
-     * Returns whether objects stored in this member should be validated.
-     *
-     * @return bool
-     *
-     * @deprecated since version 2.5, to be removed in 3.0.
-     *             Use {@link getCascadingStrategy()} instead.
-     */
-    public function isCascaded()
-    {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.5 and will be removed in 3.0. Use the getCascadingStrategy() method instead.', E_USER_DEPRECATED);
-
-        return (bool) ($this->cascadingStrategy & CascadingStrategy::CASCADE);
-    }
-
-    /**
-     * Returns whether arrays or traversable objects stored in this member
-     * should be traversed and validated in each entry.
-     *
-     * @return bool
-     *
-     * @deprecated since version 2.5, to be removed in 3.0.
-     *             Use {@link getTraversalStrategy()} instead.
-     */
-    public function isCollectionCascaded()
-    {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.5 and will be removed in 3.0. Use the getTraversalStrategy() method instead.', E_USER_DEPRECATED);
-
-        return (bool) ($this->traversalStrategy & (TraversalStrategy::IMPLICIT | TraversalStrategy::TRAVERSE));
-    }
-
-    /**
-     * Returns whether arrays or traversable objects stored in this member
-     * should be traversed recursively for inner arrays/traversable objects.
-     *
-     * @return bool
-     *
-     * @deprecated since version 2.5, to be removed in 3.0.
-     *             Use {@link getTraversalStrategy()} instead.
-     */
-    public function isCollectionCascadedDeeply()
-    {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.5 and will be removed in 3.0. Use the getTraversalStrategy() method instead.', E_USER_DEPRECATED);
-
-        return !($this->traversalStrategy & TraversalStrategy::STOP_RECURSION);
-    }
-
-    /**
      * Returns the reflection instance for accessing the member's value.
-     *
-     * @param object|string $objectOrClassName The object or the class name
-     *
-     * @return \ReflectionMethod|\ReflectionProperty The reflection instance
      */
-    public function getReflectionMember($objectOrClassName)
+    public function getReflectionMember(object|string $objectOrClassName): \ReflectionMethod|\ReflectionProperty
     {
-        $className = is_string($objectOrClassName) ? $objectOrClassName : get_class($objectOrClassName);
+        $className = \is_string($objectOrClassName) ? $objectOrClassName : $objectOrClassName::class;
         if (!isset($this->reflMember[$className])) {
             $this->reflMember[$className] = $this->newReflectionMember($objectOrClassName);
         }
@@ -240,12 +145,19 @@ abstract class MemberMetadata extends ElementMetadata implements PropertyMetadat
 
     /**
      * Creates a new reflection instance for accessing the member's value.
-     *
-     * Must be implemented by subclasses.
-     *
-     * @param object|string $objectOrClassName The object or the class name
-     *
-     * @return \ReflectionMethod|\ReflectionProperty The reflection instance
      */
-    abstract protected function newReflectionMember($objectOrClassName);
+    abstract protected function newReflectionMember(object|string $objectOrClassName): \ReflectionMethod|\ReflectionProperty;
+
+    private function checkConstraint(Constraint $constraint): void
+    {
+        if (!\in_array(Constraint::PROPERTY_CONSTRAINT, (array) $constraint->getTargets(), true)) {
+            throw new ConstraintDefinitionException(sprintf('The constraint "%s" cannot be put on properties or getters.', get_debug_type($constraint)));
+        }
+
+        if ($constraint instanceof Composite) {
+            foreach ($constraint->getNestedConstraints() as $nestedConstraint) {
+                $this->checkConstraint($nestedConstraint);
+            }
+        }
+    }
 }

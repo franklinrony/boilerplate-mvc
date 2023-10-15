@@ -11,49 +11,44 @@
 
 namespace Symfony\Component\Validator\Constraints;
 
-use Symfony\Component\Intl\Intl;
-use Symfony\Component\Validator\Context\ExecutionContextInterface;
+use Symfony\Component\Intl\Currencies;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 use Symfony\Component\Validator\Exception\UnexpectedTypeException;
+use Symfony\Component\Validator\Exception\UnexpectedValueException;
 
 /**
  * Validates whether a value is a valid currency.
  *
  * @author Miha Vrhovnik <miha.vrhovnik@pagein.si>
+ * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class CurrencyValidator extends ConstraintValidator
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
-    public function validate($value, Constraint $constraint)
+    public function validate(mixed $value, Constraint $constraint)
     {
         if (!$constraint instanceof Currency) {
-            throw new UnexpectedTypeException($constraint, __NAMESPACE__.'\Currency');
+            throw new UnexpectedTypeException($constraint, Currency::class);
         }
 
         if (null === $value || '' === $value) {
             return;
         }
 
-        if (!is_scalar($value) && !(is_object($value) && method_exists($value, '__toString'))) {
-            throw new UnexpectedTypeException($value, 'string');
+        if (!\is_scalar($value) && !$value instanceof \Stringable) {
+            throw new UnexpectedValueException($value, 'string');
         }
 
         $value = (string) $value;
-        $currencies = Intl::getCurrencyBundle()->getCurrencyNames();
 
-        if (!isset($currencies[$value])) {
-            if ($this->context instanceof ExecutionContextInterface) {
-                $this->context->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value))
-                    ->addViolation();
-            } else {
-                $this->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value))
-                    ->addViolation();
-            }
+        if (!Currencies::exists($value)) {
+            $this->context->buildViolation($constraint->message)
+                ->setParameter('{{ value }}', $this->formatValue($value))
+                ->setCode(Currency::NO_SUCH_CURRENCY_ERROR)
+                ->addViolation();
         }
     }
 }

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -22,11 +24,10 @@ namespace Cake\Database;
  */
 class SqliteCompiler extends QueryCompiler
 {
-
     /**
      * SQLite does not support ORDER BY in UNION queries.
      *
      * @var bool
      */
-    protected $_orderedUnion = false;
+    protected bool $_orderedUnion = false;
 }

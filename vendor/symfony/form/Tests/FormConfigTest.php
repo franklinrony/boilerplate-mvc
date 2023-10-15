@@ -12,57 +12,54 @@
 namespace Symfony\Component\Form\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\Form\FormConfigBuilder;
+use Symfony\Component\Form\NativeRequestHandler;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class FormConfigTest extends TestCase
 {
-    public function getHtml4Ids()
+    public static function getHtml4Ids()
     {
-        return array(
-            array('z0'),
-            array('A0'),
-            array('A9'),
-            array('Z0'),
-            array('#', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array('a#', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array('a$', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array('a%', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array('a ', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array("a\t", 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array("a\n", 'Symfony\Component\Form\Exception\InvalidArgumentException'),
-            array('a-'),
-            array('a_'),
-            array('a:'),
+        return [
+            ['z0'],
+            ['A0'],
+            ['A9'],
+            ['Z0'],
+            ['#', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ['a#', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ['a$', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ['a%', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ['a ', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ["a\t", 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ["a\n", 'Symfony\Component\Form\Exception\InvalidArgumentException'],
+            ['a-'],
+            ['a_'],
+            ['a:'],
             // Periods are allowed by the HTML4 spec, but disallowed by us
             // because they break the generated property paths
-            array('a.', 'Symfony\Component\Form\Exception\InvalidArgumentException'),
+            ['a.', 'Symfony\Component\Form\Exception\InvalidArgumentException'],
             // Contrary to the HTML4 spec, we allow names starting with a
             // number, otherwise naming fields by collection indices is not
             // possible.
             // For root forms, leading digits will be stripped from the
             // "id" attribute to produce valid HTML4.
-            array('0'),
-            array('9'),
+            ['0'],
+            ['9'],
             // Contrary to the HTML4 spec, we allow names starting with an
             // underscore, since this is already a widely used practice in
             // Symfony.
             // For root forms, leading underscores will be stripped from the
             // "id" attribute to produce valid HTML4.
-            array('_'),
+            ['_'],
             // Integers are allowed
-            array(0),
-            array(123),
+            [0],
+            [123],
             // NULL is allowed
-            array(null),
-            // Other types are not
-            array(1.23, 'Symfony\Component\Form\Exception\UnexpectedTypeException'),
-            array(5., 'Symfony\Component\Form\Exception\UnexpectedTypeException'),
-            array(true, 'Symfony\Component\Form\Exception\UnexpectedTypeException'),
-            array(new \stdClass(), 'Symfony\Component\Form\Exception\UnexpectedTypeException'),
-        );
+            [null],
+        ];
     }
 
     /**
@@ -70,15 +67,11 @@ class FormConfigTest extends TestCase
      */
     public function testNameAcceptsOnlyNamesValidAsIdsInHtml4($name, $expectedException = null)
     {
-        $dispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcherInterface')->getMock();
-
-        if (null !== $expectedException && method_exists($this, 'expectException')) {
+        if (null !== $expectedException) {
             $this->expectException($expectedException);
-        } elseif (null !== $expectedException) {
-            $this->setExpectedException($expectedException);
         }
 
-        $formConfigBuilder = new FormConfigBuilder($name, null, $dispatcher);
+        $formConfigBuilder = new FormConfigBuilder($name, null, new EventDispatcher());
 
         $this->assertSame((string) $name, $formConfigBuilder->getName());
     }
@@ -87,7 +80,7 @@ class FormConfigTest extends TestCase
     {
         $config = $this->getConfigBuilder()->getFormConfig();
 
-        $this->assertInstanceOf('Symfony\Component\Form\NativeRequestHandler', $config->getRequestHandler());
+        $this->assertInstanceOf(NativeRequestHandler::class, $config->getRequestHandler());
     }
 
     public function testGetRequestHandlerReusesNativeRequestHandlerInstance()
@@ -138,18 +131,8 @@ class FormConfigTest extends TestCase
         self::assertSame('PATCH', $formConfigBuilder->getMethod());
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\InvalidArgumentException
-     */
-    public function testSetMethodDoesNotAllowOtherValues()
-    {
-        $this->getConfigBuilder()->setMethod('foo');
-    }
-
     private function getConfigBuilder($name = 'name')
     {
-        $dispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcherInterface')->getMock();
-
-        return new FormConfigBuilder($name, null, $dispatcher);
+        return new FormConfigBuilder($name, null, new EventDispatcher());
     }
 }

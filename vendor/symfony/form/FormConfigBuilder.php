@@ -11,14 +11,13 @@
 
 namespace Symfony\Component\Form;
 
-use Symfony\Component\Form\Exception\BadMethodCallException;
-use Symfony\Component\Form\Exception\InvalidArgumentException;
-use Symfony\Component\Form\Exception\UnexpectedTypeException;
-use Symfony\Component\PropertyAccess\PropertyPath;
-use Symfony\Component\PropertyAccess\PropertyPathInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\EventDispatcher\ImmutableEventDispatcher;
+use Symfony\Component\Form\Exception\BadMethodCallException;
+use Symfony\Component\Form\Exception\InvalidArgumentException;
+use Symfony\Component\PropertyAccess\PropertyPath;
+use Symfony\Component\PropertyAccess\PropertyPathInterface;
 
 /**
  * A basic form configuration.
@@ -29,170 +28,53 @@ class FormConfigBuilder implements FormConfigBuilderInterface
 {
     /**
      * Caches a globally unique {@link NativeRequestHandler} instance.
-     *
-     * @var NativeRequestHandler
      */
-    private static $nativeRequestHandler;
+    private static NativeRequestHandler $nativeRequestHandler;
 
-    /**
-     * The accepted request methods.
-     *
-     * @var array
-     */
-    private static $allowedMethods = array(
-        'GET',
-        'PUT',
-        'POST',
-        'DELETE',
-        'PATCH',
-    );
-
-    /**
-     * @var bool
-     */
+    /** @var bool */
     protected $locked = false;
 
-    /**
-     * @var EventDispatcherInterface
-     */
-    private $dispatcher;
-
-    /**
-     * @var string
-     */
-    private $name;
-
-    /**
-     * @var PropertyPathInterface
-     */
-    private $propertyPath;
-
-    /**
-     * @var bool
-     */
-    private $mapped = true;
-
-    /**
-     * @var bool
-     */
-    private $byReference = true;
-
-    /**
-     * @var bool
-     */
-    private $inheritData = false;
-
-    /**
-     * @var bool
-     */
-    private $compound = false;
-
-    /**
-     * @var ResolvedFormTypeInterface
-     */
-    private $type;
-
-    /**
-     * @var array
-     */
-    private $viewTransformers = array();
-
-    /**
-     * @var array
-     */
-    private $modelTransformers = array();
-
-    /**
-     * @var DataMapperInterface
-     */
-    private $dataMapper;
-
-    /**
-     * @var bool
-     */
-    private $required = true;
-
-    /**
-     * @var bool
-     */
-    private $disabled = false;
-
-    /**
-     * @var bool
-     */
-    private $errorBubbling = false;
-
-    /**
-     * @var mixed
-     */
-    private $emptyData;
-
-    /**
-     * @var array
-     */
-    private $attributes = array();
-
-    /**
-     * @var mixed
-     */
-    private $data;
-
-    /**
-     * @var string
-     */
-    private $dataClass;
-
-    /**
-     * @var bool
-     */
-    private $dataLocked;
-
-    /**
-     * @var FormFactoryInterface
-     */
-    private $formFactory;
-
-    /**
-     * @var string
-     */
-    private $action;
-
-    /**
-     * @var string
-     */
-    private $method = 'POST';
-
-    /**
-     * @var RequestHandlerInterface
-     */
-    private $requestHandler;
-
-    /**
-     * @var bool
-     */
-    private $autoInitialize = false;
-
-    /**
-     * @var array
-     */
-    private $options;
+    private EventDispatcherInterface $dispatcher;
+    private string $name;
+    private ?PropertyPathInterface $propertyPath = null;
+    private bool $mapped = true;
+    private bool $byReference = true;
+    private bool $inheritData = false;
+    private bool $compound = false;
+    private ResolvedFormTypeInterface $type;
+    private array $viewTransformers = [];
+    private array $modelTransformers = [];
+    private ?DataMapperInterface $dataMapper = null;
+    private bool $required = true;
+    private bool $disabled = false;
+    private bool $errorBubbling = false;
+    private mixed $emptyData = null;
+    private array $attributes = [];
+    private mixed $data = null;
+    private ?string $dataClass;
+    private bool $dataLocked = false;
+    private FormFactoryInterface $formFactory;
+    private string $action = '';
+    private string $method = 'POST';
+    private RequestHandlerInterface $requestHandler;
+    private bool $autoInitialize = false;
+    private array $options;
+    private ?\Closure $isEmptyCallback = null;
 
     /**
      * Creates an empty form configuration.
      *
-     * @param string|int               $name       The form name
-     * @param string                   $dataClass  The class of the form's data
-     * @param EventDispatcherInterface $dispatcher The event dispatcher
-     * @param array                    $options    The form options
+     * @param string|null $name      The form name
+     * @param string|null $dataClass The class of the form's data
      *
      * @throws InvalidArgumentException if the data class is not a valid class or if
      *                                  the name contains invalid characters
      */
-    public function __construct($name, $dataClass, EventDispatcherInterface $dispatcher, array $options = array())
+    public function __construct(?string $name, ?string $dataClass, EventDispatcherInterface $dispatcher, array $options = [])
     {
         self::validateName($name);
 
-        if (null !== $dataClass && !class_exists($dataClass) && !interface_exists($dataClass)) {
+        if (null !== $dataClass && !class_exists($dataClass) && !interface_exists($dataClass, false)) {
             throw new InvalidArgumentException(sprintf('Class "%s" not found. Is the "data_class" form option set correctly?', $dataClass));
         }
 
@@ -202,10 +84,7 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         $this->options = $options;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addEventListener($eventName, $listener, $priority = 0)
+    public function addEventListener(string $eventName, callable $listener, int $priority = 0): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -216,10 +95,7 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addEventSubscriber(EventSubscriberInterface $subscriber)
+    public function addEventSubscriber(EventSubscriberInterface $subscriber): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -230,10 +106,7 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addViewTransformer(DataTransformerInterface $viewTransformer, $forcePrepend = false)
+    public function addViewTransformer(DataTransformerInterface $viewTransformer, bool $forcePrepend = false): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -248,24 +121,18 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function resetViewTransformers()
+    public function resetViewTransformers(): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->viewTransformers = array();
+        $this->viewTransformers = [];
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function addModelTransformer(DataTransformerInterface $modelTransformer, $forceAppend = false)
+    public function addModelTransformer(DataTransformerInterface $modelTransformer, bool $forceAppend = false): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -280,24 +147,18 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function resetModelTransformers()
+    public function resetModelTransformers(): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->modelTransformers = array();
+        $this->modelTransformers = [];
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getEventDispatcher()
+    public function getEventDispatcher(): EventDispatcherInterface
     {
         if ($this->locked && !$this->dispatcher instanceof ImmutableEventDispatcher) {
             $this->dispatcher = new ImmutableEventDispatcher($this->dispatcher);
@@ -306,256 +167,159 @@ class FormConfigBuilder implements FormConfigBuilderInterface
         return $this->dispatcher;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getName(): string
     {
         return $this->name;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getPropertyPath()
+    public function getPropertyPath(): ?PropertyPathInterface
     {
         return $this->propertyPath;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getMapped()
+    public function getMapped(): bool
     {
         return $this->mapped;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getByReference()
+    public function getByReference(): bool
     {
         return $this->byReference;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getInheritData()
+    public function getInheritData(): bool
     {
         return $this->inheritData;
     }
 
-    /**
-     * Alias of {@link getInheritData()}.
-     *
-     * @return bool
-     *
-     * @deprecated since version 2.3, to be removed in 3.0.
-     *             Use {@link getInheritData()} instead.
-     */
-    public function getVirtual()
-    {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.3 and will be removed in 3.0. Use the FormConfigBuilder::getInheritData() method instead.', E_USER_DEPRECATED);
-
-        return $this->getInheritData();
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getCompound()
+    public function getCompound(): bool
     {
         return $this->compound;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getType()
+    public function getType(): ResolvedFormTypeInterface
     {
         return $this->type;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getViewTransformers()
+    public function getViewTransformers(): array
     {
         return $this->viewTransformers;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getModelTransformers()
+    public function getModelTransformers(): array
     {
         return $this->modelTransformers;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getDataMapper()
+    public function getDataMapper(): ?DataMapperInterface
     {
         return $this->dataMapper;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getRequired()
+    public function getRequired(): bool
     {
         return $this->required;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getDisabled()
+    public function getDisabled(): bool
     {
         return $this->disabled;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getErrorBubbling()
+    public function getErrorBubbling(): bool
     {
         return $this->errorBubbling;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getEmptyData()
+    public function getEmptyData(): mixed
     {
         return $this->emptyData;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAttributes()
+    public function getAttributes(): array
     {
         return $this->attributes;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function hasAttribute($name)
+    public function hasAttribute(string $name): bool
     {
-        return array_key_exists($name, $this->attributes);
+        return \array_key_exists($name, $this->attributes);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAttribute($name, $default = null)
+    public function getAttribute(string $name, mixed $default = null): mixed
     {
-        return array_key_exists($name, $this->attributes) ? $this->attributes[$name] : $default;
+        return \array_key_exists($name, $this->attributes) ? $this->attributes[$name] : $default;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getData()
+    public function getData(): mixed
     {
         return $this->data;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getDataClass()
+    public function getDataClass(): ?string
     {
         return $this->dataClass;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getDataLocked()
+    public function getDataLocked(): bool
     {
         return $this->dataLocked;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getFormFactory()
+    public function getFormFactory(): FormFactoryInterface
     {
+        if (!isset($this->formFactory)) {
+            throw new BadMethodCallException('The form factory must be set before retrieving it.');
+        }
+
         return $this->formFactory;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAction()
+    public function getAction(): string
     {
         return $this->action;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getMethod()
+    public function getMethod(): string
     {
         return $this->method;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getRequestHandler()
+    public function getRequestHandler(): RequestHandlerInterface
     {
-        if (null === $this->requestHandler) {
-            if (null === self::$nativeRequestHandler) {
-                self::$nativeRequestHandler = new NativeRequestHandler();
-            }
-            $this->requestHandler = self::$nativeRequestHandler;
-        }
-
-        return $this->requestHandler;
+        return $this->requestHandler ??= self::$nativeRequestHandler ??= new NativeRequestHandler();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAutoInitialize()
+    public function getAutoInitialize(): bool
     {
         return $this->autoInitialize;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getOptions()
+    public function getOptions(): array
     {
         return $this->options;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function hasOption($name)
+    public function hasOption(string $name): bool
     {
-        return array_key_exists($name, $this->options);
+        return \array_key_exists($name, $this->options);
+    }
+
+    public function getOption(string $name, mixed $default = null): mixed
+    {
+        return \array_key_exists($name, $this->options) ? $this->options[$name] : $default;
+    }
+
+    public function getIsEmptyCallback(): ?callable
+    {
+        return $this->isEmptyCallback;
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function getOption($name, $default = null)
-    {
-        return array_key_exists($name, $this->options) ? $this->options[$name] : $default;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setAttribute($name, $value)
+    public function setAttribute(string $name, mixed $value): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -567,9 +331,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setAttributes(array $attributes)
+    public function setAttributes(array $attributes): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -581,10 +345,13 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setDataMapper(DataMapperInterface $dataMapper = null)
+    public function setDataMapper(DataMapperInterface $dataMapper = null): static
     {
+        if (1 > \func_num_args()) {
+            trigger_deprecation('symfony/form', '6.2', 'Calling "%s()" without any arguments is deprecated, pass null explicitly instead.', __METHOD__);
+        }
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
@@ -595,23 +362,23 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setDisabled($disabled)
+    public function setDisabled(bool $disabled): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->disabled = (bool) $disabled;
+        $this->disabled = $disabled;
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setEmptyData($emptyData)
+    public function setEmptyData(mixed $emptyData): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -623,37 +390,37 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setErrorBubbling($errorBubbling)
+    public function setErrorBubbling(bool $errorBubbling): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->errorBubbling = null === $errorBubbling ? null : (bool) $errorBubbling;
+        $this->errorBubbling = $errorBubbling;
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setRequired($required)
+    public function setRequired(bool $required): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->required = (bool) $required;
+        $this->required = $required;
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setPropertyPath($propertyPath)
+    public function setPropertyPath(string|PropertyPathInterface|null $propertyPath): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -669,9 +436,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setMapped($mapped)
+    public function setMapped(bool $mapped): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -683,9 +450,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setByReference($byReference)
+    public function setByReference(bool $byReference): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -697,9 +464,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setInheritData($inheritData)
+    public function setInheritData(bool $inheritData): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -711,24 +478,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * Alias of {@link setInheritData()}.
-     *
-     * @param bool $inheritData Whether the form should inherit its parent's data
-     *
-     * @deprecated since version 2.3, to be removed in 3.0.
-     *             Use {@link setInheritData()} instead.
+     * @return $this
      */
-    public function setVirtual($inheritData)
-    {
-        @trigger_error('The '.__METHOD__.' method is deprecated since Symfony 2.3 and will be removed in 3.0. Use the FormConfigBuilder::setInheritData() method instead.', E_USER_DEPRECATED);
-
-        $this->setInheritData($inheritData);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setCompound($compound)
+    public function setCompound(bool $compound): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -740,9 +492,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setType(ResolvedFormTypeInterface $type)
+    public function setType(ResolvedFormTypeInterface $type): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -754,9 +506,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setData($data)
+    public function setData(mixed $data): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -768,9 +520,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setDataLocked($locked)
+    public function setDataLocked(bool $locked): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -782,7 +534,7 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
     public function setFormFactory(FormFactoryInterface $formFactory)
     {
@@ -796,9 +548,9 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setAction($action)
+    public function setAction(string $action): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('The config builder cannot be modified anymore.');
@@ -810,33 +562,23 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setMethod($method)
+    public function setMethod(string $method): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('The config builder cannot be modified anymore.');
         }
 
-        $upperCaseMethod = strtoupper($method);
-
-        if (!in_array($upperCaseMethod, self::$allowedMethods)) {
-            throw new InvalidArgumentException(sprintf(
-                'The form method is "%s", but should be one of "%s".',
-                $method,
-                implode('", "', self::$allowedMethods)
-            ));
-        }
-
-        $this->method = $upperCaseMethod;
+        $this->method = strtoupper($method);
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setRequestHandler(RequestHandlerInterface $requestHandler)
+    public function setRequestHandler(RequestHandlerInterface $requestHandler): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('The config builder cannot be modified anymore.');
@@ -848,23 +590,20 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @return $this
      */
-    public function setAutoInitialize($initialize)
+    public function setAutoInitialize(bool $initialize): static
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
         }
 
-        $this->autoInitialize = (bool) $initialize;
+        $this->autoInitialize = $initialize;
 
         return $this;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getFormConfig()
+    public function getFormConfig(): FormConfigInterface
     {
         if ($this->locked) {
             throw new BadMethodCallException('FormConfigBuilder methods cannot be accessed anymore once the builder is turned into a FormConfigInterface instance.');
@@ -878,24 +617,26 @@ class FormConfigBuilder implements FormConfigBuilderInterface
     }
 
     /**
+     * @return $this
+     */
+    public function setIsEmptyCallback(?callable $isEmptyCallback): static
+    {
+        $this->isEmptyCallback = null === $isEmptyCallback ? null : $isEmptyCallback(...);
+
+        return $this;
+    }
+
+    /**
      * Validates whether the given variable is a valid form name.
      *
-     * @param string|int $name The tested form name
-     *
-     * @throws UnexpectedTypeException  if the name is not a string or an integer
      * @throws InvalidArgumentException if the name contains invalid characters
+     *
+     * @internal
      */
-    public static function validateName($name)
+    final public static function validateName(?string $name): void
     {
-        if (null !== $name && !is_string($name) && !is_int($name)) {
-            throw new UnexpectedTypeException($name, 'string, integer or null');
-        }
-
         if (!self::isValidName($name)) {
-            throw new InvalidArgumentException(sprintf(
-                'The name "%s" contains illegal characters. Names should start with a letter, digit or underscore and only contain letters, digits, numbers, underscores ("_"), hyphens ("-") and colons (":").',
-                $name
-            ));
+            throw new InvalidArgumentException(sprintf('The name "%s" contains illegal characters. Names should start with a letter, digit or underscore and only contain letters, digits, numbers, underscores ("_"), hyphens ("-") and colons (":").', $name));
         }
     }
 
@@ -908,12 +649,8 @@ class FormConfigBuilder implements FormConfigBuilderInterface
      *   * starts with a letter, digit or underscore
      *   * contains only letters, digits, numbers, underscores ("_"),
      *     hyphens ("-") and colons (":")
-     *
-     * @param string $name The tested form name
-     *
-     * @return bool Whether the name is valid
      */
-    public static function isValidName($name)
+    final public static function isValidName(?string $name): bool
     {
         return '' === $name || null === $name || preg_match('/^[a-zA-Z0-9_][a-zA-Z0-9_\-:]*$/D', $name);
     }

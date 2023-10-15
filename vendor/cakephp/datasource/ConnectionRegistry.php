@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -17,29 +19,27 @@ namespace Cake\Datasource;
 use Cake\Core\App;
 use Cake\Core\ObjectRegistry;
 use Cake\Datasource\Exception\MissingDatasourceException;
+use Closure;
 
 /**
  * A registry object for connection instances.
  *
  * @see \Cake\Datasource\ConnectionManager
+ * @extends \Cake\Core\ObjectRegistry<\Cake\Datasource\ConnectionInterface>
  */
 class ConnectionRegistry extends ObjectRegistry
 {
-
     /**
      * Resolve a datasource classname.
      *
      * Part of the template method for Cake\Core\ObjectRegistry::load()
      *
      * @param string $class Partial classname to resolve.
-     * @return string|false Either the correct classname or false.
+     * @return class-string<\Cake\Datasource\ConnectionInterface>|null Either the correct class name or null.
      */
-    protected function _resolveClassName($class)
+    protected function _resolveClassName(string $class): ?string
     {
-        if (is_object($class)) {
-            return $class;
-        }
-
+        /** @var class-string<\Cake\Datasource\ConnectionInterface>|null */
         return App::className($class, 'Datasource');
     }
 
@@ -49,11 +49,11 @@ class ConnectionRegistry extends ObjectRegistry
      * Part of the template method for Cake\Core\ObjectRegistry::load()
      *
      * @param string $class The classname that is missing.
-     * @param string $plugin The plugin the datasource is missing in.
+     * @param string|null $plugin The plugin the datasource is missing in.
      * @return void
      * @throws \Cake\Datasource\Exception\MissingDatasourceException
      */
-    protected function _throwMissingClassError($class, $plugin)
+    protected function _throwMissingClassError(string $class, ?string $plugin): void
     {
         throw new MissingDatasourceException([
             'class' => $class,
@@ -66,37 +66,39 @@ class ConnectionRegistry extends ObjectRegistry
      *
      * Part of the template method for Cake\Core\ObjectRegistry::load()
      *
-     * If a callable is passed as first argument, The returned value of this
-     * function will be the result of the callable.
+     * If a closure is passed as first argument, The returned value of this
+     * function will be the result from calling the closure.
      *
-     * @param string|object|callable $class The classname or object to make.
+     * @param \Cake\Datasource\ConnectionInterface|\Closure|class-string<\Cake\Datasource\ConnectionInterface> $class The classname or object to make.
      * @param string $alias The alias of the object.
-     * @param array $settings An array of settings to use for the datasource.
-     * @return object A connection with the correct settings.
+     * @param array<string, mixed> $config An array of settings to use for the datasource.
+     * @return \Cake\Datasource\ConnectionInterface A connection with the correct settings.
      */
-    protected function _create($class, $alias, $settings)
+    protected function _create(object|string $class, string $alias, array $config): ConnectionInterface
     {
-        if (is_callable($class)) {
+        if (is_string($class)) {
+            unset($config['className']);
+
+            return new $class($config);
+        }
+
+        if ($class instanceof Closure) {
             return $class($alias);
         }
 
-        if (is_object($class)) {
-            return $class;
-        }
-
-        unset($settings['className']);
-
-        return new $class($settings);
+        return $class;
     }
 
     /**
      * Remove a single adapter from the registry.
      *
      * @param string $name The adapter name.
-     * @return void
+     * @return $this
      */
-    public function unload($name)
+    public function unload(string $name)
     {
         unset($this->_loaded[$name]);
+
+        return $this;
     }
 }

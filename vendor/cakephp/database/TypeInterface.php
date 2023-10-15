@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -20,7 +22,6 @@ namespace Cake\Database;
  */
 interface TypeInterface
 {
-
     /**
      * Casts given value from a PHP type to one acceptable by a database.
      *
@@ -28,7 +29,7 @@ interface TypeInterface
      * @param \Cake\Database\Driver $driver Object from which database preferences and configuration will be extracted.
      * @return mixed Given PHP type casted to one acceptable by a database.
      */
-    public function toDatabase($value, Driver $driver);
+    public function toDatabase(mixed $value, Driver $driver): mixed;
 
     /**
      * Casts given value from a database type to a PHP equivalent.
@@ -37,19 +38,19 @@ interface TypeInterface
      * @param \Cake\Database\Driver $driver Object from which database preferences and configuration will be extracted
      * @return mixed Given value casted from a database to a PHP equivalent.
      */
-    public function toPHP($value, Driver $driver);
+    public function toPHP(mixed $value, Driver $driver): mixed;
 
     /**
-     * Casts given value to its Statement equivalent.
+     * Get the binding type to use in a PDO statement.
      *
-     * @param mixed $value Value to be converted to PDO statement.
+     * @param mixed $value The value being bound.
      * @param \Cake\Database\Driver $driver Object from which database preferences and configuration will be extracted.
-     * @return mixed Given value casted to its Statement equivalent.
+     * @return int One of PDO::PARAM_* constants.
      */
-    public function toStatement($value, Driver $driver);
+    public function toStatement(mixed $value, Driver $driver): int;
 
     /**
-     * Marshalls flat data into PHP objects.
+     * Marshals flat data into PHP objects.
      *
      * Most useful for converting request data into PHP objects,
      * that make sense for the rest of the ORM/Database layers.
@@ -57,7 +58,7 @@ interface TypeInterface
      * @param mixed $value The value to convert.
      * @return mixed Converted value.
      */
-    public function marshal($value);
+    public function marshal(mixed $value): mixed;
 
     /**
      * Returns the base type name that this class is inheriting.
@@ -66,16 +67,16 @@ interface TypeInterface
      * but still want the rest of the framework to use the same assumptions it would
      * do about the base type it inherits from.
      *
-     * @return string The base type name that this class is inheriting.
+     * @return string|null The base type name that this class is inheriting.
      */
-    public function getBaseType();
+    public function getBaseType(): ?string;
 
     /**
      * Returns type identifier name for this object.
      *
-     * @return string The type identifier name for this object.
+     * @return string|null The type identifier name for this object.
      */
-    public function getName();
+    public function getName(): ?string;
 
     /**
      * Generate a new primary key value for a given type.
@@ -86,5 +87,5 @@ interface TypeInterface
      * @return mixed A new primary key value.
      * @see \Cake\Database\Type\UuidType
      */
-    public function newId();
+    public function newId(): mixed;
 }

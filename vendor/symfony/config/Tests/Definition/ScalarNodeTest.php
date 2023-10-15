@@ -13,6 +13,8 @@ namespace Symfony\Component\Config\Tests\Definition;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\ArrayNode;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\Config\Definition\Exception\InvalidTypeException;
 use Symfony\Component\Config\Definition\ScalarNode;
 
 class ScalarNodeTest extends TestCase
@@ -26,7 +28,7 @@ class ScalarNodeTest extends TestCase
         $this->assertSame($value, $node->normalize($value));
     }
 
-    public function getValidValues()
+    public static function getValidValues(): array
     {
         return [
             [false],
@@ -44,17 +46,20 @@ class ScalarNodeTest extends TestCase
     public function testSetDeprecated()
     {
         $childNode = new ScalarNode('foo');
-        $childNode->setDeprecated('"%node%" is deprecated');
+        $childNode->setDeprecated('vendor/package', '1.1', '"%node%" is deprecated');
 
         $this->assertTrue($childNode->isDeprecated());
-        $this->assertSame('"foo" is deprecated', $childNode->getDeprecationMessage($childNode->getName(), $childNode->getPath()));
+        $deprecation = $childNode->getDeprecation($childNode->getName(), $childNode->getPath());
+        $this->assertSame('"foo" is deprecated', $deprecation['message']);
+        $this->assertSame('vendor/package', $deprecation['package']);
+        $this->assertSame('1.1', $deprecation['version']);
 
         $node = new ArrayNode('root');
         $node->addChild($childNode);
 
         $deprecationTriggered = 0;
         $deprecationHandler = function ($level, $message, $file, $line) use (&$prevErrorHandler, &$deprecationTriggered) {
-            if (E_USER_DEPRECATED === $level) {
+            if (\E_USER_DEPRECATED === $level) {
                 return ++$deprecationTriggered;
             }
 
@@ -62,27 +67,33 @@ class ScalarNodeTest extends TestCase
         };
 
         $prevErrorHandler = set_error_handler($deprecationHandler);
-        $node->finalize([]);
-        restore_error_handler();
+        try {
+            $node->finalize([]);
+        } finally {
+            restore_error_handler();
+        }
         $this->assertSame(0, $deprecationTriggered, '->finalize() should not trigger if the deprecated node is not set');
 
         $prevErrorHandler = set_error_handler($deprecationHandler);
-        $node->finalize(['foo' => '']);
-        restore_error_handler();
+        try {
+            $node->finalize(['foo' => '']);
+        } finally {
+            restore_error_handler();
+        }
         $this->assertSame(1, $deprecationTriggered, '->finalize() should trigger if the deprecated node is set');
     }
 
     /**
      * @dataProvider getInvalidValues
-     * @expectedException \Symfony\Component\Config\Definition\Exception\InvalidTypeException
      */
     public function testNormalizeThrowsExceptionOnInvalidValues($value)
     {
+        $this->expectException(InvalidTypeException::class);
         $node = new ScalarNode('test');
         $node->normalize($value);
     }
 
-    public function getInvalidValues()
+    public static function getInvalidValues(): array
     {
         return [
             [[]],
@@ -95,12 +106,8 @@ class ScalarNodeTest extends TestCase
     {
         $node = new ScalarNode('test');
 
-        if (method_exists($this, 'expectException')) {
-            $this->expectException('Symfony\Component\Config\Definition\Exception\InvalidTypeException');
-            $this->expectExceptionMessage('Invalid type for path "test". Expected scalar, but got array.');
-        } else {
-            $this->setExpectedException('Symfony\Component\Config\Definition\Exception\InvalidTypeException', 'Invalid type for path "test". Expected scalar, but got array.');
-        }
+        $this->expectException(InvalidTypeException::class);
+        $this->expectExceptionMessage('Invalid type for path "test". Expected "scalar", but got "array".');
 
         $node->normalize([]);
     }
@@ -110,12 +117,8 @@ class ScalarNodeTest extends TestCase
         $node = new ScalarNode('test');
         $node->setInfo('"the test value"');
 
-        if (method_exists($this, 'expectException')) {
-            $this->expectException('Symfony\Component\Config\Definition\Exception\InvalidTypeException');
-            $this->expectExceptionMessage("Invalid type for path \"test\". Expected scalar, but got array.\nHint: \"the test value\"");
-        } else {
-            $this->setExpectedException('Symfony\Component\Config\Definition\Exception\InvalidTypeException', "Invalid type for path \"test\". Expected scalar, but got array.\nHint: \"the test value\"");
-        }
+        $this->expectException(InvalidTypeException::class);
+        $this->expectExceptionMessage("Invalid type for path \"test\". Expected \"scalar\", but got \"array\".\nHint: \"the test value\"");
 
         $node->normalize([]);
     }
@@ -133,7 +136,7 @@ class ScalarNodeTest extends TestCase
         $this->assertSame($value, $node->finalize($value));
     }
 
-    public function getValidNonEmptyValues()
+    public static function getValidNonEmptyValues(): array
     {
         return [
             [false],
@@ -148,18 +151,18 @@ class ScalarNodeTest extends TestCase
 
     /**
      * @dataProvider getEmptyValues
-     * @expectedException \Symfony\Component\Config\Definition\Exception\InvalidConfigurationException
      *
      * @param mixed $value
      */
     public function testNotAllowedEmptyValuesThrowException($value)
     {
+        $this->expectException(InvalidConfigurationException::class);
         $node = new ScalarNode('test');
         $node->setAllowEmptyValue(false);
         $node->finalize($value);
     }
 
-    public function getEmptyValues()
+    public static function getEmptyValues(): array
     {
         return [
             [null],

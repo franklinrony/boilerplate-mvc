@@ -17,23 +17,21 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 class HiddenType extends AbstractType
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function configureOptions(OptionsResolver $resolver)
     {
-        $resolver->setDefaults(array(
+        $resolver->setDefaults([
             // hidden fields cannot have a required attribute
             'required' => false,
             // Pass errors to the parent
             'error_bubbling' => true,
             'compound' => false,
-        ));
+            'invalid_message' => 'The hidden field is invalid.',
+        ]);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'hidden';
     }

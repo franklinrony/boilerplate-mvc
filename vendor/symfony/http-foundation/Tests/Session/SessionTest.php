@@ -14,7 +14,10 @@ namespace Symfony\Component\HttpFoundation\Tests\Session;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Session\Attribute\AttributeBag;
 use Symfony\Component\HttpFoundation\Session\Flash\FlashBag;
+use Symfony\Component\HttpFoundation\Session\Flash\FlashBagInterface;
 use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\SessionBagProxy;
+use Symfony\Component\HttpFoundation\Session\Storage\MetadataBag;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
 /**
@@ -36,13 +39,13 @@ class SessionTest extends TestCase
      */
     protected $session;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->storage = new MockArraySessionStorage();
         $this->session = new Session($this->storage, new AttributeBag(), new FlashBag());
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->storage = null;
         $this->session = null;
@@ -88,7 +91,7 @@ class SessionTest extends TestCase
         } catch (\Exception $e) {
         }
 
-        $this->assertInstanceOf('\LogicException', $e);
+        $this->assertInstanceOf(\LogicException::class, $e);
     }
 
     public function testSetName()
@@ -153,7 +156,7 @@ class SessionTest extends TestCase
         $this->assertEquals([], $this->session->all());
     }
 
-    public function setProvider()
+    public static function setProvider()
     {
         return [
             ['foo', 'bar', ['foo' => 'bar']],
@@ -211,7 +214,7 @@ class SessionTest extends TestCase
 
     public function testGetFlashBag()
     {
-        $this->assertInstanceOf('Symfony\\Component\\HttpFoundation\\Session\\Flash\\FlashBagInterface', $this->session->getFlashBag());
+        $this->assertInstanceOf(FlashBagInterface::class, $this->session->getFlashBag());
     }
 
     public function testGetIterator()
@@ -240,7 +243,7 @@ class SessionTest extends TestCase
 
     public function testGetMeta()
     {
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\Session\Storage\MetadataBag', $this->session->getMetadataBag());
+        $this->assertInstanceOf(MetadataBag::class, $this->session->getMetadataBag());
     }
 
     public function testIsEmpty()
@@ -259,5 +262,29 @@ class SessionTest extends TestCase
 
         $flash->get('hello');
         $this->assertTrue($this->session->isEmpty());
+    }
+
+    public function testGetBagWithBagImplementingGetBag()
+    {
+        $bag = new AttributeBag();
+        $bag->setName('foo');
+
+        $storage = new MockArraySessionStorage();
+        $storage->registerBag($bag);
+
+        $this->assertSame($bag, (new Session($storage))->getBag('foo'));
+    }
+
+    public function testGetBagWithBagNotImplementingGetBag()
+    {
+        $data = [];
+
+        $bag = new AttributeBag();
+        $bag->setName('foo');
+
+        $storage = new MockArraySessionStorage();
+        $storage->registerBag(new SessionBagProxy($bag, $data, $usageIndex, null));
+
+        $this->assertSame($bag, (new Session($storage))->getBag('foo'));
     }
 }

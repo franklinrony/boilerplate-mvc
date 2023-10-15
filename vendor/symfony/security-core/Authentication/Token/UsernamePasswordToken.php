@@ -11,7 +11,7 @@
 
 namespace Symfony\Component\Security\Core\Authentication\Token;
 
-use Symfony\Component\Security\Core\Role\RoleInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * UsernamePasswordToken implements a username and password token.
@@ -20,86 +20,34 @@ use Symfony\Component\Security\Core\Role\RoleInterface;
  */
 class UsernamePasswordToken extends AbstractToken
 {
-    private $credentials;
-    private $providerKey;
+    private string $firewallName;
 
-    /**
-     * @param string|object            $user        The username (like a nickname, email address, etc.), or a UserInterface instance or an object implementing a __toString method
-     * @param mixed                    $credentials This usually is the password of the user
-     * @param string                   $providerKey The provider key
-     * @param (RoleInterface|string)[] $roles       An array of roles
-     *
-     * @throws \InvalidArgumentException
-     */
-    public function __construct($user, $credentials, $providerKey, array $roles = array())
+    public function __construct(UserInterface $user, string $firewallName, array $roles = [])
     {
         parent::__construct($roles);
 
-        if (empty($providerKey)) {
-            throw new \InvalidArgumentException('$providerKey must not be empty.');
+        if ('' === $firewallName) {
+            throw new \InvalidArgumentException('$firewallName must not be empty.');
         }
 
         $this->setUser($user);
-        $this->credentials = $credentials;
-        $this->providerKey = $providerKey;
-
-        parent::setAuthenticated(\count($roles) > 0);
+        $this->firewallName = $firewallName;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function setAuthenticated($isAuthenticated)
+    public function getFirewallName(): string
     {
-        if ($isAuthenticated) {
-            throw new \LogicException('Cannot set this token to trusted after instantiation.');
-        }
-
-        parent::setAuthenticated(false);
+        return $this->firewallName;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getCredentials()
+    public function __serialize(): array
     {
-        return $this->credentials;
+        return [null, $this->firewallName, parent::__serialize()];
     }
 
-    /**
-     * Returns the provider key.
-     *
-     * @return string The provider key
-     */
-    public function getProviderKey()
+    public function __unserialize(array $data): void
     {
-        return $this->providerKey;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function eraseCredentials()
-    {
-        parent::eraseCredentials();
-
-        $this->credentials = null;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function serialize()
-    {
-        return serialize(array($this->credentials, $this->providerKey, parent::serialize()));
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function unserialize($serialized)
-    {
-        list($this->credentials, $this->providerKey, $parentStr) = unserialize($serialized);
-        parent::unserialize($parentStr);
+        [, $this->firewallName, $parentData] = $data;
+        $parentData = \is_array($parentData) ? $parentData : unserialize($parentData);
+        parent::__unserialize($parentData);
     }
 }

@@ -37,7 +37,7 @@ class AcceptHeaderTest extends TestCase
         $this->assertEquals($items, $parsed);
     }
 
-    public function provideFromStringData()
+    public static function provideFromStringData()
     {
         return [
             ['', []],
@@ -57,7 +57,7 @@ class AcceptHeaderTest extends TestCase
         $this->assertEquals($string, (string) $header);
     }
 
-    public function provideToStringData()
+    public static function provideToStringData()
     {
         return [
             [[], ''],
@@ -76,7 +76,7 @@ class AcceptHeaderTest extends TestCase
         $this->assertEquals($values, array_keys($header->all()));
     }
 
-    public function provideFilterData()
+    public static function provideFilterData()
     {
         return [
             ['fr-FR,fr;q=0.8,en-US;q=0.6,en;q=0.4', '/fr.*/', ['fr-FR', 'fr']],
@@ -92,12 +92,39 @@ class AcceptHeaderTest extends TestCase
         $this->assertEquals($values, array_keys($header->all()));
     }
 
-    public function provideSortingData()
+    public static function provideSortingData()
     {
         return [
             'quality has priority' => ['*;q=0.3,ISO-8859-1,utf-8;q=0.7', ['ISO-8859-1', 'utf-8', '*']],
             'order matters when q is equal' => ['*;q=0.3,ISO-8859-1;q=0.7,utf-8;q=0.7', ['ISO-8859-1', 'utf-8', '*']],
             'order matters when q is equal2' => ['*;q=0.3,utf-8;q=0.7,ISO-8859-1;q=0.7', ['utf-8', 'ISO-8859-1', '*']],
         ];
+    }
+
+    /**
+     * @dataProvider provideDefaultValueData
+     */
+    public function testDefaultValue($acceptHeader, $value, $expectedQuality)
+    {
+        $header = AcceptHeader::fromString($acceptHeader);
+        $this->assertSame($expectedQuality, $header->get($value)->getQuality());
+    }
+
+    public static function provideDefaultValueData()
+    {
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, *;q=0.3', 'text/xml', 0.3];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*;q=0.3', 'text/xml', 0.3];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*;q=0.3', 'text/html', 1.0];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*;q=0.3', 'text/plain', 0.5];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*;q=0.3', '*', 0.3];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*', '*', 1.0];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*', 'text/xml', 1.0];
+        yield ['text/plain;q=0.5, text/html, text/x-dvi;q=0.8, */*', 'text/*', 1.0];
+        yield ['text/plain;q=0.5, text/html, text/*;q=0.8, */*', 'text/*', 0.8];
+        yield ['text/plain;q=0.5, text/html, text/*;q=0.8, */*', 'text/html', 1.0];
+        yield ['text/plain;q=0.5, text/html, text/*;q=0.8, */*', 'text/x-dvi', 0.8];
+        yield ['*;q=0.3, ISO-8859-1;q=0.7, utf-8;q=0.7', '*', 0.3];
+        yield ['*;q=0.3, ISO-8859-1;q=0.7, utf-8;q=0.7', 'utf-8', 0.7];
+        yield ['*;q=0.3, ISO-8859-1;q=0.7, utf-8;q=0.7', 'SHIFT_JIS', 0.3];
     }
 }

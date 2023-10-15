@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,26 +16,42 @@
  */
 namespace Cake\Database\Driver;
 
-use Cake\Database\Dialect\MysqlDialectTrait;
 use Cake\Database\Driver;
-use Cake\Database\Query;
-use Cake\Database\Statement\MysqlStatement;
+use Cake\Database\DriverFeatureEnum;
+use Cake\Database\Schema\MysqlSchemaDialect;
+use Cake\Database\Schema\SchemaDialect;
 use PDO;
 
 /**
- * Class Mysql
+ * MySQL Driver
  */
 class Mysql extends Driver
 {
+    /**
+     * @inheritDoc
+     */
+    protected const MAX_ALIAS_LENGTH = 256;
 
-    use MysqlDialectTrait;
+    /**
+     * Server type MySQL
+     *
+     * @var string
+     */
+    protected const SERVER_TYPE_MYSQL = 'mysql';
+
+    /**
+     * Server type MariaDB
+     *
+     * @var string
+     */
+    protected const SERVER_TYPE_MARIADB = 'mariadb';
 
     /**
      * Base configuration settings for MySQL driver
      *
-     * @var array
+     * @var array<string, mixed>
      */
-    protected $_baseConfig = [
+    protected array $_baseConfig = [
         'persistent' => true,
         'host' => 'localhost',
         'username' => 'root',
@@ -47,28 +65,54 @@ class Mysql extends Driver
     ];
 
     /**
-     * The server version
+     * String used to start a database identifier quoting to make it safe
      *
      * @var string
      */
-    protected $_version;
+    protected string $_startQuote = '`';
 
     /**
-     * Whether or not the server supports native JSON
+     * String used to end a database identifier quoting to make it safe
      *
-     * @var bool
+     * @var string
      */
-    protected $_supportsNativeJson;
+    protected string $_endQuote = '`';
 
     /**
-     * Establishes a connection to the database server
+     * Server type.
      *
-     * @return bool true on success
+     * If the underlying server is MariaDB, its value will get set to `'mariadb'`
+     * after `version()` method is called.
+     *
+     * @var string
      */
-    public function connect()
+    protected string $serverType = self::SERVER_TYPE_MYSQL;
+
+    /**
+     * Mapping of feature to db server version for feature availability checks.
+     *
+     * @var array<string, array<string, string>>
+     */
+    protected array $featureVersions = [
+        'mysql' => [
+            'json' => '5.7.0',
+            'cte' => '8.0.0',
+            'window' => '8.0.0',
+        ],
+        'mariadb' => [
+            'json' => '10.2.7',
+            'cte' => '10.2.1',
+            'window' => '10.2.0',
+        ],
+    ];
+
+    /**
+     * @inheritDoc
+     */
+    public function connect(): void
     {
-        if ($this->_connection) {
-            return true;
+        if (isset($this->pdo)) {
+            return;
         }
         $config = $this->_config;
 
@@ -78,9 +122,6 @@ class Mysql extends Driver
 
         if (!empty($config['timezone'])) {
             $config['init'][] = sprintf("SET time_zone = '%s'", $config['timezone']);
-        }
-        if (!empty($config['encoding'])) {
-            $config['init'][] = sprintf('SET NAMES %s', $config['encoding']);
         }
 
         $config['flags'] += [
@@ -98,21 +139,22 @@ class Mysql extends Driver
         }
 
         if (empty($config['unix_socket'])) {
-            $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset={$config['encoding']}";
+            $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
         } else {
             $dsn = "mysql:unix_socket={$config['unix_socket']};dbname={$config['database']}";
         }
 
-        $this->_connect($dsn, $config);
-
-        if (!empty($config['init'])) {
-            $connection = $this->getConnection();
-            foreach ((array)$config['init'] as $command) {
-                $connection->exec($command);
-            }
+        if (!empty($config['encoding'])) {
+            $dsn .= ";charset={$config['encoding']}";
         }
 
-        return true;
+        $this->pdo = $this->createPdo($dsn, $config);
+
+        if (!empty($config['init'])) {
+            foreach ((array)$config['init'] as $command) {
+                $this->pdo->exec($command);
+            }
+        }
     }
 
     /**
@@ -120,61 +162,99 @@ class Mysql extends Driver
      *
      * @return bool true if it is valid to use this driver
      */
-    public function enabled()
+    public function enabled(): bool
     {
-        return in_array('mysql', PDO::getAvailableDrivers());
+        return in_array('mysql', PDO::getAvailableDrivers(), true);
     }
 
     /**
-     * Prepares a sql statement to be executed
-     *
-     * @param string|\Cake\Database\Query $query The query to prepare.
-     * @return \Cake\Database\StatementInterface
+     * @inheritDoc
      */
-    public function prepare($query)
+    public function schemaDialect(): SchemaDialect
     {
-        $this->connect();
-        $isObject = $query instanceof Query;
-        $statement = $this->_connection->prepare($isObject ? $query->sql() : $query);
-        $result = new MysqlStatement($statement, $this);
-        if ($isObject && $query->isBufferedResultsEnabled() === false) {
-            $result->bufferResults(false);
+        if (isset($this->_schemaDialect)) {
+            return $this->_schemaDialect;
         }
 
-        return $result;
+        return $this->_schemaDialect = new MysqlSchemaDialect($this);
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function schema()
+    public function schema(): string
     {
         return $this->_config['database'];
     }
 
     /**
-     * {@inheritDoc}
+     * Get the SQL for disabling foreign keys.
+     *
+     * @return string
      */
-    public function supportsDynamicConstraints()
+    public function disableForeignKeySQL(): string
     {
-        return true;
+        return 'SET foreign_key_checks = 0';
     }
 
     /**
-     * Returns true if the server supports native JSON columns
+     * @inheritDoc
+     */
+    public function enableForeignKeySQL(): string
+    {
+        return 'SET foreign_key_checks = 1';
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function supports(DriverFeatureEnum $feature): bool
+    {
+        return match ($feature) {
+            DriverFeatureEnum::DISABLE_CONSTRAINT_WITHOUT_TRANSACTION,
+            DriverFeatureEnum::SAVEPOINT => true,
+
+            DriverFeatureEnum::TRUNCATE_WITH_CONSTRAINTS => false,
+
+            DriverFeatureEnum::CTE,
+            DriverFeatureEnum::JSON,
+            DriverFeatureEnum::WINDOW => version_compare(
+                $this->version(),
+                $this->featureVersions[$this->serverType][$feature->value],
+                '>='
+            ),
+        };
+    }
+
+    /**
+     * Returns true if the connected server is MariaDB.
      *
      * @return bool
      */
-    public function supportsNativeJson()
+    public function isMariadb(): bool
     {
-        if ($this->_supportsNativeJson !== null) {
-            return $this->_supportsNativeJson;
-        }
+        $this->version();
 
+        return $this->serverType === static::SERVER_TYPE_MARIADB;
+    }
+
+    /**
+     * Returns connected server version.
+     *
+     * @return string
+     */
+    public function version(): string
+    {
         if ($this->_version === null) {
-            $this->_version = $this->_connection->getAttribute(PDO::ATTR_SERVER_VERSION);
+            $this->_version = (string)$this->getPdo()->getAttribute(PDO::ATTR_SERVER_VERSION);
+
+            if (str_contains($this->_version, 'MariaDB')) {
+                $this->serverType = static::SERVER_TYPE_MARIADB;
+                preg_match('/^(?:5\.5\.5-)?(\d+\.\d+\.\d+.*-MariaDB[^:]*)/', $this->_version, $matches);
+                $this->_version = $matches[1];
+            }
         }
 
-        return $this->_supportsNativeJson = version_compare($this->_version, '5.7.0', '>=');
+        return $this->_version;
     }
 }

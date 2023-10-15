@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -15,30 +17,25 @@
 namespace Cake\Datasource;
 
 use Cake\Collection\Collection;
-use Countable;
+use Cake\Core\Configure;
 
 /**
  * Generic ResultSet decorator. This will make any traversable object appear to
  * be a database result
+ *
+ * @template T of \Cake\Datasource\EntityInterface|array
+ * @implements \Cake\Datasource\ResultSetInterface<T>
  */
 class ResultSetDecorator extends Collection implements ResultSetInterface
 {
-
     /**
-     * Make this object countable.
-     *
-     * Part of the Countable interface. Calling this method
-     * will convert the underlying traversable object into an array and
-     * get the count of the underlying data.
-     *
-     * @return int
+     * @inheritDoc
      */
-    public function count()
+    public function __debugInfo(): array
     {
-        if ($this->getInnerIterator() instanceof Countable) {
-            return $this->getInnerIterator()->count();
-        }
+        $parentInfo = parent::__debugInfo();
+        $limit = Configure::read('App.ResultSetDebugLimit', 10);
 
-        return count($this->toArray());
+        return array_merge($parentInfo, ['items' => $this->take($limit)->toArray()]);
     }
 }

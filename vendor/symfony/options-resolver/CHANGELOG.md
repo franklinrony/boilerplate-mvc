@@ -1,6 +1,51 @@
 CHANGELOG
 =========
 
+6.3
+---
+
+ * Add `OptionsResolver::setIgnoreUndefined()` and `OptionConfigurator::ignoreUndefined()` to ignore not defined options while resolving
+
+6.0
+---
+
+ * Remove `OptionsResolverIntrospector::getDeprecationMessage()`
+
+5.3
+---
+
+ * Add prototype definition for nested options
+
+5.1.0
+-----
+
+ * added fluent configuration of options using `OptionResolver::define()`
+ * added `setInfo()` and `getInfo()` methods
+ * updated the signature of method `OptionsResolver::setDeprecated()` to `OptionsResolver::setDeprecation(string $option, string $package, string $version, $message)`
+ * deprecated `OptionsResolverIntrospector::getDeprecationMessage()`, use `OptionsResolverIntrospector::getDeprecation()` instead
+
+5.0.0
+-----
+
+ * added argument `$triggerDeprecation` to `OptionsResolver::offsetGet()`
+
+4.3.0
+-----
+
+ * added `OptionsResolver::addNormalizer` method
+
+4.2.0
+-----
+
+ * added support for nested options definition
+ * added `setDeprecated` and `isDeprecated` methods
+
+3.4.0
+-----
+
+ * added `OptionsResolverIntrospector` to inspect options definitions inside an `OptionsResolver` instance
+ * added array of types support in allowed types (e.g int[])
+
 2.6.0
 -----
 

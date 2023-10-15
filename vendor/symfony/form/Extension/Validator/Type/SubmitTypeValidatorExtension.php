@@ -11,16 +11,15 @@
 
 namespace Symfony\Component\Form\Extension\Validator\Type;
 
+use Symfony\Component\Form\Extension\Core\Type\SubmitType;
+
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class SubmitTypeValidatorExtension extends BaseValidatorExtension
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function getExtendedType()
+    public static function getExtendedTypes(): iterable
     {
-        return 'submit';
+        return [SubmitType::class];
     }
 }

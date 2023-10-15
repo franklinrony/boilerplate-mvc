@@ -1,15 +1,6 @@
 ``random``
 ==========
 
-.. versionadded:: 1.5
-    The ``random`` function was added in Twig 1.5.
-
-.. versionadded:: 1.6
-    String and integer handling was added in Twig 1.6.
-
-.. versionadded:: 1.38
-    The "max" argument was added in Twig 1.38.
-
 The ``random`` function returns a random value depending on the supplied
 parameter type:
 
@@ -19,7 +10,7 @@ parameter type:
 * a random integer between the integer parameter (when negative) and 0 (inclusive).
 * a random integer between the first integer and the second integer parameter (inclusive).
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {{ random(['apple', 'orange', 'citrus']) }} {# example output: orange #}
     {{ random('ABC') }}                         {# example output: C #}
@@ -32,5 +23,3 @@ Arguments
 
 * ``values``: The values
 * ``max``: The max value when values is an integer
-
-.. _`mt_rand`: https://secure.php.net/mt_rand

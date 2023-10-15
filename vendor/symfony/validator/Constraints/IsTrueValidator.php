@@ -11,7 +11,6 @@
 
 namespace Symfony\Component\Validator\Constraints;
 
-use Symfony\Component\Validator\Context\ExecutionContextInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 use Symfony\Component\Validator\Exception\UnexpectedTypeException;
@@ -22,28 +21,21 @@ use Symfony\Component\Validator\Exception\UnexpectedTypeException;
 class IsTrueValidator extends ConstraintValidator
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
-    public function validate($value, Constraint $constraint)
+    public function validate(mixed $value, Constraint $constraint)
     {
         if (!$constraint instanceof IsTrue) {
-            throw new UnexpectedTypeException($constraint, __NAMESPACE__.'\IsTrue');
+            throw new UnexpectedTypeException($constraint, IsTrue::class);
         }
 
-        if (null === $value) {
+        if (null === $value || true === $value || 1 === $value || '1' === $value) {
             return;
         }
 
-        if (true !== $value && 1 !== $value && '1' !== $value) {
-            if ($this->context instanceof ExecutionContextInterface) {
-                $this->context->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value))
-                    ->addViolation();
-            } else {
-                $this->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value))
-                    ->addViolation();
-            }
-        }
+        $this->context->buildViolation($constraint->message)
+            ->setParameter('{{ value }}', $this->formatValue($value))
+            ->setCode(IsTrue::NOT_TRUE_ERROR)
+            ->addViolation();
     }
 }

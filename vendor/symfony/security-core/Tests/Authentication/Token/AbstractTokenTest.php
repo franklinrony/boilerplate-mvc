@@ -13,75 +13,31 @@ namespace Symfony\Component\Security\Core\Tests\Authentication\Token;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Security\Core\Authentication\Token\AbstractToken;
-use Symfony\Component\Security\Core\Role\Role;
-use Symfony\Component\Security\Core\Role\SwitchUserRole;
-use Symfony\Component\Security\Core\User\User;
+use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\Security\Core\User\UserInterface;
 
-class TestUser
-{
-    protected $name;
-
-    public function __construct($name)
-    {
-        $this->name = $name;
-    }
-
-    public function __toString()
-    {
-        return $this->name;
-    }
-}
-
-class ConcreteToken extends AbstractToken
-{
-    private $credentials = 'credentials_value';
-
-    public function __construct($user, array $roles = array())
-    {
-        parent::__construct($roles);
-
-        $this->setUser($user);
-    }
-
-    public function serialize()
-    {
-        return serialize(array($this->credentials, parent::serialize()));
-    }
-
-    public function unserialize($serialized)
-    {
-        list($this->credentials, $parentStr) = unserialize($serialized);
-        parent::unserialize($parentStr);
-    }
-
-    public function getCredentials()
-    {
-    }
-}
-
-/** @noinspection PhpUndefinedClassInspection */
 class AbstractTokenTest extends TestCase
 {
-    public function testGetUsername()
+    /**
+     * @dataProvider provideUsers
+     */
+    public function testGetUserIdentifier($user, string $username)
     {
-        $token = $this->getToken(array('ROLE_FOO'));
-        $token->setUser('fabien');
-        $this->assertEquals('fabien', $token->getUsername());
-
-        $token->setUser(new TestUser('fabien'));
-        $this->assertEquals('fabien', $token->getUsername());
-
-        $user = $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
-        $user->expects($this->once())->method('getUsername')->will($this->returnValue('fabien'));
+        $token = new ConcreteToken(['ROLE_FOO']);
         $token->setUser($user);
-        $this->assertEquals('fabien', $token->getUsername());
+        $this->assertEquals($username, $token->getUserIdentifier());
+    }
+
+    public static function provideUsers()
+    {
+        yield [new InMemoryUser('fabien', null), 'fabien'];
     }
 
     public function testEraseCredentials()
     {
-        $token = $this->getToken(array('ROLE_FOO'));
+        $token = new ConcreteToken(['ROLE_FOO']);
 
-        $user = $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
+        $user = $this->createMock(UserInterface::class);
         $user->expects($this->once())->method('eraseCredentials');
         $token->setUser($user);
 
@@ -90,70 +46,25 @@ class AbstractTokenTest extends TestCase
 
     public function testSerialize()
     {
-        $token = $this->getToken(array('ROLE_FOO', new Role('ROLE_BAR')));
-        $token->setAttributes(array('foo' => 'bar'));
+        $token = new ConcreteToken(['ROLE_FOO', 'ROLE_BAR']);
+        $token->setAttributes(['foo' => 'bar']);
 
         $uToken = unserialize(serialize($token));
 
-        $this->assertEquals($token->getRoles(), $uToken->getRoles());
+        $this->assertEquals($token->getRoleNames(), $uToken->getRoleNames());
         $this->assertEquals($token->getAttributes(), $uToken->getAttributes());
-    }
-
-    public function testSerializeWithRoleObjects()
-    {
-        $user = new User('name', 'password', array(new Role('ROLE_FOO'), new Role('ROLE_BAR')));
-        $token = new ConcreteToken($user, $user->getRoles());
-
-        $serialized = serialize($token);
-        $unserialized = unserialize($serialized);
-
-        $roles = $unserialized->getRoles();
-
-        $this->assertEquals($roles, $user->getRoles());
-    }
-
-    public function testSerializeParent()
-    {
-        $user = new TestUser('fabien');
-        $token = new ConcreteToken($user, array('ROLE_FOO'));
-
-        $parentToken = new ConcreteToken($user, array(new SwitchUserRole('ROLE_PREVIOUS', $token)));
-        $uToken = unserialize(serialize($parentToken));
-
-        $this->assertEquals(
-            current($parentToken->getRoles())->getSource()->getUser(),
-            current($uToken->getRoles())->getSource()->getUser()
-        );
     }
 
     public function testConstructor()
     {
-        $token = $this->getToken(array('ROLE_FOO'));
-        $this->assertEquals(array(new Role('ROLE_FOO')), $token->getRoles());
-
-        $token = $this->getToken(array(new Role('ROLE_FOO')));
-        $this->assertEquals(array(new Role('ROLE_FOO')), $token->getRoles());
-
-        $token = $this->getToken(array(new Role('ROLE_FOO'), 'ROLE_BAR'));
-        $this->assertEquals(array(new Role('ROLE_FOO'), new Role('ROLE_BAR')), $token->getRoles());
-    }
-
-    public function testAuthenticatedFlag()
-    {
-        $token = $this->getToken();
-        $this->assertFalse($token->isAuthenticated());
-
-        $token->setAuthenticated(true);
-        $this->assertTrue($token->isAuthenticated());
-
-        $token->setAuthenticated(false);
-        $this->assertFalse($token->isAuthenticated());
+        $token = new ConcreteToken(['ROLE_FOO']);
+        $this->assertEquals(['ROLE_FOO'], $token->getRoleNames());
     }
 
     public function testAttributes()
     {
-        $attributes = array('foo' => 'bar');
-        $token = $this->getToken();
+        $attributes = ['foo' => 'bar'];
+        $token = new ConcreteToken();
         $token->setAttributes($attributes);
 
         $this->assertEquals($attributes, $token->getAttributes(), '->getAttributes() returns the token attributes');
@@ -167,119 +78,47 @@ class AbstractTokenTest extends TestCase
             $token->getAttribute('foobar');
             $this->fail('->getAttribute() throws an \InvalidArgumentException exception when the attribute does not exist');
         } catch (\Exception $e) {
-            $this->assertInstanceOf('\InvalidArgumentException', $e, '->getAttribute() throws an \InvalidArgumentException exception when the attribute does not exist');
+            $this->assertInstanceOf(\InvalidArgumentException::class, $e, '->getAttribute() throws an \InvalidArgumentException exception when the attribute does not exist');
             $this->assertEquals('This token has no "foobar" attribute.', $e->getMessage(), '->getAttribute() throws an \InvalidArgumentException exception when the attribute does not exist');
         }
     }
 
     /**
-     * @dataProvider getUsers
+     * @dataProvider provideUsers
      */
     public function testSetUser($user)
     {
-        $token = $this->getToken();
+        $token = new ConcreteToken();
         $token->setUser($user);
         $this->assertSame($user, $token->getUser());
     }
+}
 
-    public function getUsers()
+class ConcreteToken extends AbstractToken
+{
+    private $credentials = 'credentials_value';
+
+    public function __construct(array $roles = [], UserInterface $user = null)
     {
-        $user = $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
-        $advancedUser = $this->getMockBuilder('Symfony\Component\Security\Core\User\AdvancedUserInterface')->getMock();
+        parent::__construct($roles);
 
-        return array(
-            array($advancedUser),
-            array($user),
-            array(new TestUser('foo')),
-            array('foo'),
-        );
+        if (null !== $user) {
+            $this->setUser($user);
+        }
     }
 
-    /**
-     * @dataProvider getUserChanges
-     */
-    public function testSetUserSetsAuthenticatedToFalseWhenUserChanges($firstUser, $secondUser)
+    public function __serialize(): array
     {
-        $token = $this->getToken();
-        $token->setAuthenticated(true);
-        $this->assertTrue($token->isAuthenticated());
-
-        $token->setUser($firstUser);
-        $this->assertTrue($token->isAuthenticated());
-
-        $token->setUser($secondUser);
-        $this->assertFalse($token->isAuthenticated());
+        return [$this->credentials, parent::__serialize()];
     }
 
-    public function getUserChanges()
+    public function __unserialize(array $data): void
     {
-        $user = $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
-        $advancedUser = $this->getMockBuilder('Symfony\Component\Security\Core\User\AdvancedUserInterface')->getMock();
-
-        return array(
-            array(
-                'foo', 'bar',
-            ),
-            array(
-                'foo', new TestUser('bar'),
-            ),
-            array(
-                'foo', $user,
-            ),
-            array(
-                'foo', $advancedUser,
-            ),
-            array(
-                $user, 'foo',
-            ),
-            array(
-                $advancedUser, 'foo',
-            ),
-            array(
-                $user, new TestUser('foo'),
-            ),
-            array(
-                $advancedUser, new TestUser('foo'),
-            ),
-            array(
-                new TestUser('foo'), new TestUser('bar'),
-            ),
-            array(
-                new TestUser('foo'), 'bar',
-            ),
-            array(
-                new TestUser('foo'), $user,
-            ),
-            array(
-                new TestUser('foo'), $advancedUser,
-            ),
-            array(
-                $user, $advancedUser,
-            ),
-            array(
-                $advancedUser, $user,
-            ),
-        );
+        [$this->credentials, $parentState] = $data;
+        parent::__unserialize($parentState);
     }
 
-    /**
-     * @dataProvider getUsers
-     */
-    public function testSetUserDoesNotSetAuthenticatedToFalseWhenUserDoesNotChange($user)
+    public function getCredentials(): mixed
     {
-        $token = $this->getToken();
-        $token->setAuthenticated(true);
-        $this->assertTrue($token->isAuthenticated());
-
-        $token->setUser($user);
-        $this->assertTrue($token->isAuthenticated());
-
-        $token->setUser($user);
-        $this->assertTrue($token->isAuthenticated());
-    }
-
-    protected function getToken(array $roles = array())
-    {
-        return $this->getMockForAbstractClass('Symfony\Component\Security\Core\Authentication\Token\AbstractToken', array($roles));
     }
 }

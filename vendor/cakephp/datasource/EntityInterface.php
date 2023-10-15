@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -16,193 +18,313 @@ namespace Cake\Datasource;
 
 use ArrayAccess;
 use JsonSerializable;
+use Stringable;
 
 /**
  * Describes the methods that any class representing a data storage should
  * comply with.
  *
- * In 4.x the following methods will officially be added to the interface:
- *
- * @method $this setHidden(array $properties, $merge = false)
- * @method array getHidden()
- * @method $this setVirtual(array $properties, $merge = false)
- * @method array getVirtual()
- * @method $this setDirty($property, $isDirty)
- * @method bool isDirty($property = null)
- * @method bool hasErrors($includeNested = true)
- * @method array getErrors()
- * @method array getError($field)
- * @method array setErrors(array $fields, $overwrite = false)
- * @method array setError($field, $errors, $overwrite = false)
- * @method $this setAccess($property, $set)
- * @method bool isAccessible($property)
- * @method $this setSource($source)
- * @method string getSource()
- * @method array extractOriginal(array $properties)
- * @method array extractOriginalChanged(array $properties)
- *
  * @property mixed $id Alias for commonly used primary key.
+ * @template-extends \ArrayAccess<string, mixed>
  */
-interface EntityInterface extends ArrayAccess, JsonSerializable
+interface EntityInterface extends ArrayAccess, JsonSerializable, Stringable
 {
-
     /**
-     * Sets one or multiple properties to the specified value
+     * Sets hidden fields.
      *
-     * @param string|array $property the name of property to set or a list of
-     * properties with their respective values
-     * @param mixed $value The value to set to the property or an array if the
-     * first argument is also an array, in which case will be treated as $options
-     * @param array $options options to be used for setting the property. Allowed option
-     * keys are `setter` and `guard`
-     * @return \Cake\Datasource\EntityInterface
+     * @param array<string> $fields An array of fields to hide from array exports.
+     * @param bool $merge Merge the new fields with the existing. By default false.
+     * @return $this
      */
-    public function set($property, $value = null, array $options = []);
+    public function setHidden(array $fields, bool $merge = false);
 
     /**
-     * Returns the value of a property by name
+     * Gets the hidden fields.
      *
-     * @param string $property the name of the property to retrieve
-     * @return mixed
+     * @return array<string>
      */
-    public function &get($property);
+    public function getHidden(): array;
 
     /**
-     * Returns whether this entity contains a property named $property
-     * regardless of if it is empty.
+     * Sets the virtual fields on this entity.
      *
-     * @param string|array $property The property to check.
+     * @param array<string> $fields An array of fields to treat as virtual.
+     * @param bool $merge Merge the new fields with the existing. By default false.
+     * @return $this
+     */
+    public function setVirtual(array $fields, bool $merge = false);
+
+    /**
+     * Gets the virtual fields on this entity.
+     *
+     * @return array<string>
+     */
+    public function getVirtual(): array;
+
+    /**
+     * Returns whether a field is an original one.
+     * Original fields are those that an entity was instantiated with.
+     *
      * @return bool
      */
-    public function has($property);
+    public function isOriginalField(string $name): bool;
 
     /**
-     * Removes a property or list of properties from this entity
+     * Returns an array of original fields.
+     * Original fields are those that an entity was initialized with.
      *
-     * @param string|array $property The property to unset.
-     * @return \Cake\Datasource\EntityInterface
+     * @return array<string>
      */
-    public function unsetProperty($property);
+    public function getOriginalFields(): array;
 
     /**
-     * Get/Set the hidden properties on this entity.
+     * Sets the dirty status of a single field.
      *
-     * If the properties argument is null, the currently hidden properties
-     * will be returned. Otherwise the hidden properties will be set.
-     *
-     * @param null|array $properties Either an array of properties to hide or null to get properties
-     * @return array|\Cake\Datasource\EntityInterface
+     * @param string $field the field to set or check status for
+     * @param bool $isDirty true means the field was changed, false means
+     * it was not changed. Default true.
+     * @return $this
      */
-    public function hiddenProperties($properties = null);
+    public function setDirty(string $field, bool $isDirty = true);
 
     /**
-     * Get/Set the virtual properties on this entity.
+     * Checks if the entity is dirty or if a single field of it is dirty.
      *
-     * If the properties argument is null, the currently virtual properties
-     * will be returned. Otherwise the virtual properties will be set.
-     *
-     * @param null|array $properties Either an array of properties to treat as virtual or null to get properties
-     * @return array|\Cake\Datasource\EntityInterface
+     * @param string|null $field The field to check the status for. Null for the whole entity.
+     * @return bool Whether the field was changed or not
      */
-    public function virtualProperties($properties = null);
+    public function isDirty(?string $field = null): bool;
 
     /**
-     * Get the list of visible properties.
+     * Gets the dirty fields.
      *
-     * @return array A list of properties that are 'visible' in all representations.
+     * @return array<string>
      */
-    public function visibleProperties();
+    public function getDirty(): array;
 
     /**
-     * Returns an array with all the visible properties set in this entity.
+     * Returns whether this entity has errors.
      *
-     * *Note* hidden properties are not visible, and will not be output
+     * @param bool $includeNested true will check nested entities for hasErrors()
+     * @return bool
+     */
+    public function hasErrors(bool $includeNested = true): bool;
+
+    /**
+     * Returns all validation errors.
+     *
+     * @return array
+     */
+    public function getErrors(): array;
+
+    /**
+     * Returns validation errors of a field
+     *
+     * @param string $field Field name to get the errors from
+     * @return array
+     */
+    public function getError(string $field): array;
+
+    /**
+     * Sets error messages to the entity
+     *
+     * @param array $errors The array of errors to set.
+     * @param bool $overwrite Whether to overwrite pre-existing errors for $fields
+     * @return $this
+     */
+    public function setErrors(array $errors, bool $overwrite = false);
+
+    /**
+     * Sets errors for a single field
+     *
+     * @param string $field The field to get errors for, or the array of errors to set.
+     * @param array|string $errors The errors to be set for $field
+     * @param bool $overwrite Whether to overwrite pre-existing errors for $field
+     * @return $this
+     */
+    public function setError(string $field, array|string $errors, bool $overwrite = false);
+
+    /**
+     * Stores whether a field value can be changed or set in this entity.
+     *
+     * @param array<string>|string $field single or list of fields to change its accessibility
+     * @param bool $set true marks the field as accessible, false will
+     * mark it as protected.
+     * @return $this
+     */
+    public function setAccess(array|string $field, bool $set);
+
+    /**
+     * Accessible configuration for this entity.
+     *
+     * @return array<bool>
+     */
+    public function getAccessible(): array;
+
+    /**
+     * Checks if a field is accessible
+     *
+     * @param string $field Field name to check
+     * @return bool
+     */
+    public function isAccessible(string $field): bool;
+
+    /**
+     * Sets the source alias
+     *
+     * @param string $alias the alias of the repository
+     * @return $this
+     */
+    public function setSource(string $alias);
+
+    /**
+     * Returns the alias of the repository from which this entity came from.
+     *
+     * @return string
+     */
+    public function getSource(): string;
+
+    /**
+     * Returns an array with the requested original fields
+     * stored in this entity, indexed by field name.
+     *
+     * @param array<string> $fields List of fields to be returned
+     * @return array
+     */
+    public function extractOriginal(array $fields): array;
+
+    /**
+     * Returns an array with only the original fields
+     * stored in this entity, indexed by field name.
+     *
+     * @param array<string> $fields List of fields to be returned
+     * @return array
+     */
+    public function extractOriginalChanged(array $fields): array;
+
+    /**
+     * Sets one or multiple fields to the specified value
+     *
+     * @param array<string, mixed>|string $field the name of field to set or a list of
+     * fields with their respective values
+     * @param mixed $value The value to set to the field or an array if the
+     * first argument is also an array, in which case will be treated as $options
+     * @param array<string, mixed> $options Options to be used for setting the field. Allowed option
+     * keys are `setter` and `guard`
+     * @return $this
+     */
+    public function set(array|string $field, mixed $value = null, array $options = []);
+
+    /**
+     * Returns the value of a field by name
+     *
+     * @param string $field the name of the field to retrieve
+     * @return mixed
+     */
+    public function &get(string $field): mixed;
+
+    /**
+     * Enable/disable field presence check when accessing a property.
+     *
+     * If enabled an exception will be thrown when trying to access a non-existent property.
+     *
+     * @param bool $value `true` to enable, `false` to disable.
+     */
+    public function requireFieldPresence(bool $value = true): void;
+
+    /**
+     * Returns whether a field has an original value
+     *
+     * @param string $field
+     * @return bool
+     */
+    public function hasOriginal(string $field): bool;
+
+    /**
+     * Returns the original value of a field.
+     *
+     * @param string $field The name of the field.
+     * @param bool $allowFallback whether to allow falling back to the current field value if no original exists
+     * @return mixed
+     */
+    public function getOriginal(string $field, bool $allowFallback = true): mixed;
+
+    /**
+     * Gets all original values of the entity.
+     *
+     * @return array
+     */
+    public function getOriginalValues(): array;
+
+    /**
+     * Returns whether this entity contains a field named $field.
+     *
+     * The method will return `true` even when the field is set to `null`.
+     *
+     * @param array<string>|string $field The field to check.
+     * @return bool
+     */
+    public function has(array|string $field): bool;
+
+    /**
+     * Removes a field or list of fields from this entity
+     *
+     * @param array<string>|string $field The field to unset.
+     * @return $this
+     */
+    public function unset(array|string $field);
+
+    /**
+     * Get the list of visible fields.
+     *
+     * @return array<string> A list of fields that are 'visible' in all representations.
+     */
+    public function getVisible(): array;
+
+    /**
+     * Returns an array with all the visible fields set in this entity.
+     *
+     * *Note* hidden fields are not visible, and will not be output
      * by toArray().
      *
      * @return array
      */
-    public function toArray();
+    public function toArray(): array;
 
     /**
-     * Returns an array with the requested properties
-     * stored in this entity, indexed by property name
+     * Returns an array with the requested fields
+     * stored in this entity, indexed by field name
      *
-     * @param array $properties list of properties to be returned
-     * @param bool $onlyDirty Return the requested property only if it is dirty
+     * @param array<string> $fields list of fields to be returned
+     * @param bool $onlyDirty Return the requested field only if it is dirty
      * @return array
      */
-    public function extract(array $properties, $onlyDirty = false);
-
-    /**
-     * Sets the dirty status of a single property. If called with no second
-     * argument, it will return whether the property was modified or not
-     * after the object creation.
-     *
-     * When called with no arguments it will return whether or not there are any
-     * dirty property in the entity
-     *
-     * @deprecated 3.4.0 Use setDirty() and isDirty() instead.
-     * @param string|null $property the field to set or check status for
-     * @param null|bool $isDirty true means the property was changed, false means
-     * it was not changed and null will make the function return current state
-     * for that property
-     * @return bool whether the property was changed or not
-     */
-    public function dirty($property = null, $isDirty = null);
+    public function extract(array $fields, bool $onlyDirty = false): array;
 
     /**
      * Sets the entire entity as clean, which means that it will appear as
-     * no properties being modified or added at all. This is an useful call
+     * no fields being modified or added at all. This is an useful call
      * for an initial object hydration
      *
      * @return void
      */
-    public function clean();
+    public function clean(): void;
 
     /**
-     * Returns whether or not this entity has already been persisted.
-     * This method can return null in the case there is no prior information on
-     * the status of this entity.
+     * Set the status of this entity.
      *
-     * If called with a boolean, this method will set the status of this instance.
-     * Using `true` means that the instance has not been persisted in the database, `false`
-     * that it already is.
+     * Using `true` means that the entity has not been persisted in the database,
+     * `false` indicates that the entity has been persisted.
      *
-     * @param bool|null $new Indicate whether or not this instance has been persisted.
-     * @return bool If it is known whether the entity was already persisted
-     * null otherwise
+     * @param bool $new Indicate whether this entity has been persisted.
+     * @return $this
      */
-    public function isNew($new = null);
+    public function setNew(bool $new);
 
     /**
-     * Sets the error messages for a field or a list of fields. When called
-     * without the second argument it returns the validation
-     * errors for the specified fields. If called with no arguments it returns
-     * all the validation error messages stored in this entity.
+     * Returns whether this entity has already been persisted.
      *
-     * When used as a setter, this method will return this entity instance for method
-     * chaining.
-     *
-     * @deprecated 3.4.0 Use setErrors() and getErrors() instead.
-     * @param string|array|null $field The field to get errors for.
-     * @param string|array|null $errors The errors to be set for $field
-     * @param bool $overwrite Whether or not to overwrite pre-existing errors for $field
-     * @return array|\Cake\Datasource\EntityInterface
+     * @return bool Whether the entity has been persisted.
      */
-    public function errors($field = null, $errors = null, $overwrite = false);
-
-    /**
-     * Stores whether or not a property value can be changed or set in this entity.
-     * The special property `*` can also be marked as accessible or protected, meaning
-     * that any other property specified before will take its value. For example
-     * `$entity->accessible('*', true)` means that any property not specified already
-     * will be accessible by default.
-     *
-     * @deprecated 3.4.0 Use setAccess() and isAccessible() instead.
-     * @param string|array $property Either a single or list of properties to change its accessibility.
-     * @param bool|null $set true marks the property as accessible, false will
-     * mark it as protected.
-     * @return \Cake\Datasource\EntityInterface|bool
-     */
-    public function accessible($property, $set = null);
+    public function isNew(): bool;
 }

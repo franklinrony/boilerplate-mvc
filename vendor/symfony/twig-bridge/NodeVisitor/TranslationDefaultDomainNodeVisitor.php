@@ -11,8 +11,8 @@
 
 namespace Symfony\Bridge\Twig\NodeVisitor;
 
-use Symfony\Bridge\Twig\Node\TransNode;
 use Symfony\Bridge\Twig\Node\TransDefaultDomainNode;
+use Symfony\Bridge\Twig\Node\TransNode;
 use Twig\Environment;
 use Twig\Node\BlockNode;
 use Twig\Node\Expression\ArrayExpression;
@@ -28,19 +28,16 @@ use Twig\NodeVisitor\AbstractNodeVisitor;
 /**
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
+final class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
 {
-    private $scope;
+    private Scope $scope;
 
     public function __construct()
     {
         $this->scope = new Scope();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function doEnterNode(Node $node, Environment $env)
+    protected function doEnterNode(Node $node, Environment $env): Node
     {
         if ($node instanceof BlockNode || $node instanceof ModuleNode) {
             $this->scope = $this->scope->enter();
@@ -56,7 +53,7 @@ class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
                 $name = new AssignNameExpression($var, $node->getTemplateLine());
                 $this->scope->set('domain', new NameExpression($var, $node->getTemplateLine()));
 
-                return new SetNode(false, new Node(array($name)), new Node(array($node->getNode('expr'))), $node->getTemplateLine());
+                return new SetNode(false, new Node([$name]), new Node([$node->getNode('expr')]), $node->getTemplateLine());
             }
         }
 
@@ -64,21 +61,18 @@ class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
             return $node;
         }
 
-        if ($node instanceof FilterExpression && in_array($node->getNode('filter')->getAttribute('value'), array('trans', 'transchoice'))) {
+        if ($node instanceof FilterExpression && 'trans' === $node->getNode('filter')->getAttribute('value')) {
             $arguments = $node->getNode('arguments');
-            $ind = 'trans' === $node->getNode('filter')->getAttribute('value') ? 1 : 2;
             if ($this->isNamedArguments($arguments)) {
-                if (!$arguments->hasNode('domain') && !$arguments->hasNode($ind)) {
+                if (!$arguments->hasNode('domain') && !$arguments->hasNode(1)) {
                     $arguments->setNode('domain', $this->scope->get('domain'));
                 }
-            } else {
-                if (!$arguments->hasNode($ind)) {
-                    if (!$arguments->hasNode($ind - 1)) {
-                        $arguments->setNode($ind - 1, new ArrayExpression(array(), $node->getTemplateLine()));
-                    }
-
-                    $arguments->setNode($ind, $this->scope->get('domain'));
+            } elseif (!$arguments->hasNode(1)) {
+                if (!$arguments->hasNode(0)) {
+                    $arguments->setNode(0, new ArrayExpression([], $node->getTemplateLine()));
                 }
+
+                $arguments->setNode(1, $this->scope->get('domain'));
             }
         } elseif ($node instanceof TransNode) {
             if (!$node->hasNode('domain')) {
@@ -89,13 +83,10 @@ class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
         return $node;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function doLeaveNode(Node $node, Environment $env)
+    protected function doLeaveNode(Node $node, Environment $env): ?Node
     {
         if ($node instanceof TransDefaultDomainNode) {
-            return false;
+            return null;
         }
 
         if ($node instanceof BlockNode || $node instanceof ModuleNode) {
@@ -105,21 +96,15 @@ class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
         return $node;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getPriority()
+    public function getPriority(): int
     {
         return -10;
     }
 
-    /**
-     * @return bool
-     */
-    private function isNamedArguments($arguments)
+    private function isNamedArguments(Node $arguments): bool
     {
         foreach ($arguments as $name => $node) {
-            if (!is_int($name)) {
+            if (!\is_int($name)) {
                 return true;
             }
         }
@@ -127,7 +112,7 @@ class TranslationDefaultDomainNodeVisitor extends AbstractNodeVisitor
         return false;
     }
 
-    private function getVarName()
+    private function getVarName(): string
     {
         return sprintf('__internal_%s', hash('sha256', uniqid(mt_rand(), true), false));
     }

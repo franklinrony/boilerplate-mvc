@@ -23,16 +23,16 @@ class FixedDataTransformer implements DataTransformerInterface
         $this->mapping = $mapping;
     }
 
-    public function transform($value)
+    public function transform($value): mixed
     {
-        if (!array_key_exists($value, $this->mapping)) {
+        if (!\array_key_exists($value, $this->mapping)) {
             throw new TransformationFailedException(sprintf('No mapping for value "%s"', $value));
         }
 
         return $this->mapping[$value];
     }
 
-    public function reverseTransform($value)
+    public function reverseTransform($value): mixed
     {
         $result = array_search($value, $this->mapping, true);
 

@@ -15,17 +15,17 @@ class Router
     /**
      * @var array The route patterns and their handling functions
      */
-    private $afterRoutes = [];
+    private $afterRoutes = array();
 
     /**
      * @var array The before middleware route patterns and their handling functions
      */
-    private $beforeRoutes = [];
+    private $beforeRoutes = array();
 
     /**
-     * @var object|callable The function to be executed when no route has been matched
+     * @var array [object|callable] The function to be executed when no route has been matched
      */
-    protected $notFoundCallback;
+    protected $notFoundCallback = [];
 
     /**
      * @var string Current base route, used for (sub)route mounting
@@ -60,10 +60,10 @@ class Router
         $pattern = $this->baseRoute ? rtrim($pattern, '/') : $pattern;
 
         foreach (explode('|', $methods) as $method) {
-            $this->beforeRoutes[$method][] = [
+            $this->beforeRoutes[$method][] = array(
                 'pattern' => $pattern,
                 'fn' => $fn,
-            ];
+            );
         }
     }
 
@@ -80,10 +80,10 @@ class Router
         $pattern = $this->baseRoute ? rtrim($pattern, '/') : $pattern;
 
         foreach (explode('|', $methods) as $method) {
-            $this->afterRoutes[$method][] = [
+            $this->afterRoutes[$method][] = array(
                 'pattern' => $pattern,
                 'fn' => $fn,
-            ];
+            );
         }
     }
 
@@ -192,7 +192,7 @@ class Router
      */
     public function getRequestHeaders()
     {
-        $headers = [];
+        $headers = array();
 
         // If getallheaders() is available, use that
         if (function_exists('getallheaders')) {
@@ -207,7 +207,7 @@ class Router
         // Method getallheaders() not available or went wrong: manually extract 'm
         foreach ($_SERVER as $name => $value) {
             if ((substr($name, 0, 5) == 'HTTP_') || ($name == 'CONTENT_TYPE') || ($name == 'CONTENT_LENGTH')) {
-                $headers[str_replace([' ', 'Http'], ['-', 'HTTP'], ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+                $headers[str_replace(array(' ', 'Http'), array('-', 'HTTP'), ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
             }
         }
 
@@ -234,7 +234,7 @@ class Router
         // If it's a POST request, check for a method override header
         elseif ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $headers = $this->getRequestHeaders();
-            if (isset($headers['X-HTTP-Method-Override']) && in_array($headers['X-HTTP-Method-Override'], ['PUT', 'DELETE', 'PATCH'])) {
+            if (isset($headers['X-HTTP-Method-Override']) && in_array($headers['X-HTTP-Method-Override'], array('PUT', 'DELETE', 'PATCH'))) {
                 $method = $headers['X-HTTP-Method-Override'];
             }
         }
@@ -289,11 +289,7 @@ class Router
 
         // If no route was handled, trigger the 404 (if any)
         if ($numHandled === 0) {
-            if ($this->notFoundCallback) {
-                $this->invoke($this->notFoundCallback);
-            } else {
-                header($_SERVER['SERVER_PROTOCOL'] . ' 404 Not Found');
-            }
+            $this->trigger404($this->afterRoutes[$this->requestedMethod]);
         } // If a route was handled, perform the finish callback (if any)
         else {
             if ($callback && is_callable($callback)) {
@@ -313,11 +309,90 @@ class Router
     /**
      * Set the 404 handling function.
      *
+     * @param object|callable|string $match_fn The function to be executed
      * @param object|callable $fn The function to be executed
      */
-    public function set404($fn)
+    public function set404($match_fn, $fn = null)
     {
-        $this->notFoundCallback = $fn;
+      if (!is_null($fn)) {
+        $this->notFoundCallback[$match_fn] = $fn;
+      } else {
+        $this->notFoundCallback['/'] = $match_fn;
+      }
+    }
+
+    /**
+     * Triggers 404 response
+     *
+     * @param string $pattern A route pattern such as /about/system
+     */
+    public function trigger404($match = null){
+
+        // Counter to keep track of the number of routes we've handled
+        $numHandled = 0;
+
+        // handle 404 pattern
+        if (count($this->notFoundCallback) > 0)
+        {
+            // loop fallback-routes
+            foreach ($this->notFoundCallback as $route_pattern => $route_callable) {
+
+              // matches result
+              $matches = [];
+
+              // check if there is a match and get matches as $matches (pointer)
+              $is_match = $this->patternMatches($route_pattern, $this->getCurrentUri(), $matches, PREG_OFFSET_CAPTURE);
+
+              // is fallback route match?
+              if ($is_match) {
+
+                // Rework matches to only contain the matches, not the orig string
+                $matches = array_slice($matches, 1);
+
+                // Extract the matched URL parameters (and only the parameters)
+                $params = array_map(function ($match, $index) use ($matches) {
+
+                  // We have a following parameter: take the substring from the current param position until the next one's position (thank you PREG_OFFSET_CAPTURE)
+                  if (isset($matches[$index + 1]) && isset($matches[$index + 1][0]) && is_array($matches[$index + 1][0])) {
+                    if ($matches[$index + 1][0][1] > -1) {
+                      return trim(substr($match[0][0], 0, $matches[$index + 1][0][1] - $match[0][1]), '/');
+                    }
+                  } // We have no following parameters: return the whole lot
+
+                  return isset($match[0][0]) && $match[0][1] != -1 ? trim($match[0][0], '/') : null;
+                }, $matches, array_keys($matches));
+
+                $this->invoke($route_callable);
+
+                ++$numHandled;
+              }
+            }
+        }
+        if (($numHandled == 0) && (isset($this->notFoundCallback['/']))) {
+            $this->invoke($this->notFoundCallback['/']);
+        } elseif ($numHandled == 0) {
+            header($_SERVER['SERVER_PROTOCOL'] . ' 404 Not Found');
+        }
+    }
+
+    /**
+    * Replace all curly braces matches {} into word patterns (like Laravel)
+    * Checks if there is a routing match
+    *
+    * @param $pattern
+    * @param $uri
+    * @param $matches
+    * @param $flags
+    *
+    * @return bool -> is match yes/no
+    */
+    private function patternMatches($pattern, $uri, &$matches, $flags)
+    {
+      // Replace all curly braces matches {} into word patterns (like Laravel)
+      $pattern = preg_replace('/\/{(.*?)}/', '/(.*?)', $pattern);
+
+      // we may have a match!
+      return boolval(preg_match_all('#^' . $pattern . '$#', $uri, $matches, PREG_OFFSET_CAPTURE));
     }
 
     /**
@@ -338,11 +413,13 @@ class Router
 
         // Loop all routes
         foreach ($routes as $route) {
-            // Replace all curly braces matches {} into word patterns (like Laravel)
-            $route['pattern'] = preg_replace('/\/{(.*?)}/', '/(.*?)', $route['pattern']);
 
-            // we have a match!
-            if (preg_match_all('#^' . $route['pattern'] . '$#', $uri, $matches, PREG_OFFSET_CAPTURE)) {
+            // get routing matches
+            $is_match = $this->patternMatches($route['pattern'], $uri, $matches, PREG_OFFSET_CAPTURE);
+
+            // is there a valid match?
+            if ($is_match) {
+
                 // Rework matches to only contain the matches, not the orig string
                 $matches = array_slice($matches, 1);
 
@@ -351,10 +428,12 @@ class Router
 
                     // We have a following parameter: take the substring from the current param position until the next one's position (thank you PREG_OFFSET_CAPTURE)
                     if (isset($matches[$index + 1]) && isset($matches[$index + 1][0]) && is_array($matches[$index + 1][0])) {
-                        return trim(substr($match[0][0], 0, $matches[$index + 1][0][1] - $match[0][1]), '/');
+                        if ($matches[$index + 1][0][1] > -1) {
+                            return trim(substr($match[0][0], 0, $matches[$index + 1][0][1] - $match[0][1]), '/');
+                        }
                     } // We have no following parameters: return the whole lot
 
-                    return isset($match[0][0]) ? trim($match[0][0], '/') : null;
+                    return isset($match[0][0]) && $match[0][1] != -1 ? trim($match[0][0], '/') : null;
                 }, $matches, array_keys($matches));
 
                 // Call the handling function with the URL parameters if the desired input is callable
@@ -373,7 +452,7 @@ class Router
         return $numHandled;
     }
 
-    private function invoke($fn, $params = [])
+    private function invoke($fn, $params = array())
     {
         if (is_callable($fn)) {
             call_user_func_array($fn, $params);
@@ -383,18 +462,28 @@ class Router
         elseif (stripos($fn, '@') !== false) {
             // Explode segments of given route
             list($controller, $method) = explode('@', $fn);
+
             // Adjust controller class if namespace has been set
             if ($this->getNamespace() !== '') {
                 $controller = $this->getNamespace() . '\\' . $controller;
             }
-            // Check if class exists, if not just ignore and check if the class exists on the default namespace
-            if (class_exists($controller)) {
-                // First check if is a static method, directly trying to invoke it.
-                // If isn't a valid static method, we will try as a normal method invocation.
-                if (call_user_func_array([new $controller(), $method], $params) === false) {
-                    // Try to call the method as an non-static method. (the if does nothing, only avoids the notice)
-                    if (forward_static_call_array([$controller, $method], $params) === false);
+
+            try {
+                $reflectedMethod = new \ReflectionMethod($controller, $method);
+                // Make sure it's callable
+                if ($reflectedMethod->isPublic() && (!$reflectedMethod->isAbstract())) {
+                    if ($reflectedMethod->isStatic()) {
+                        forward_static_call_array(array($controller, $method), $params);
+                    } else {
+                        // Make sure we have an instance, because a non-static method must not be called statically
+                        if (\is_string($controller)) {
+                            $controller = new $controller();
+                        }
+                        call_user_func_array(array($controller, $method), $params);
+                    }
                 }
+            } catch (\ReflectionException $reflectionException) {
+                // The controller class is not available or the class does not have the method $method
             }
         }
     }

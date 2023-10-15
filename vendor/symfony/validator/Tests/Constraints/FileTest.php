@@ -14,6 +14,8 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Validator\Constraints\File;
 use Symfony\Component\Validator\Exception\ConstraintDefinitionException;
+use Symfony\Component\Validator\Mapping\ClassMetadata;
+use Symfony\Component\Validator\Mapping\Loader\AnnotationLoader;
 
 class FileTest extends TestCase
 {
@@ -22,7 +24,7 @@ class FileTest extends TestCase
      */
     public function testMaxSize($maxSize, $bytes, $binaryFormat)
     {
-        $file = new File(array('maxSize' => $maxSize));
+        $file = new File(['maxSize' => $maxSize]);
 
         $this->assertSame($bytes, $file->maxSize);
         $this->assertSame($binaryFormat, $file->binaryFormat);
@@ -31,7 +33,7 @@ class FileTest extends TestCase
 
     public function testMagicIsset()
     {
-        $file = new File(array('maxSize' => 1));
+        $file = new File(['maxSize' => 1]);
 
         $this->assertTrue($file->__isset('maxSize'));
         $this->assertTrue($file->__isset('groups'));
@@ -52,11 +54,11 @@ class FileTest extends TestCase
 
     /**
      * @dataProvider provideInvalidSizes
-     * @expectedException \Symfony\Component\Validator\Exception\ConstraintDefinitionException
      */
     public function testInvalidValueForMaxSizeThrowsExceptionAfterInitialization($maxSize)
     {
-        $file = new File(array('maxSize' => 1000));
+        $this->expectException(ConstraintDefinitionException::class);
+        $file = new File(['maxSize' => 1000]);
         $file->maxSize = $maxSize;
     }
 
@@ -65,7 +67,7 @@ class FileTest extends TestCase
      */
     public function testMaxSizeCannotBeSetToInvalidValueAfterInitialization($maxSize)
     {
-        $file = new File(array('maxSize' => 1000));
+        $file = new File(['maxSize' => 1000]);
 
         try {
             $file->maxSize = $maxSize;
@@ -77,39 +79,41 @@ class FileTest extends TestCase
 
     /**
      * @dataProvider provideInValidSizes
-     * @expectedException \Symfony\Component\Validator\Exception\ConstraintDefinitionException
      */
-    public function testInvalideMaxSize($maxSize)
+    public function testInvalidMaxSize($maxSize)
     {
-        $file = new File(array('maxSize' => $maxSize));
+        $this->expectException(ConstraintDefinitionException::class);
+        new File(['maxSize' => $maxSize]);
     }
 
-    public function provideValidSizes()
+    public static function provideValidSizes()
     {
-        return array(
-            array('500', 500, false),
-            array(12300, 12300, false),
-            array('1ki', 1024, true),
-            array('1KI', 1024, true),
-            array('2k', 2000, false),
-            array('2K', 2000, false),
-            array('1mi', 1048576, true),
-            array('1MI', 1048576, true),
-            array('3m', 3000000, false),
-            array('3M', 3000000, false),
-        );
+        return [
+            ['500', 500, false],
+            [12300, 12300, false],
+            ['1ki', 1024, true],
+            ['1KI', 1024, true],
+            ['2k', 2000, false],
+            ['2K', 2000, false],
+            ['1mi', 1048576, true],
+            ['1MI', 1048576, true],
+            ['3m', 3000000, false],
+            ['3M', 3000000, false],
+            ['1gi', 1073741824, true],
+            ['1GI', 1073741824, true],
+            ['4g', 4000000000, false],
+            ['4G', 4000000000, false],
+        ];
     }
 
-    public function provideInvalidSizes()
+    public static function provideInvalidSizes()
     {
-        return array(
-            array('+100'),
-            array('foo'),
-            array('1Ko'),
-            array('1kio'),
-            array('1G'),
-            array('1Gi'),
-        );
+        return [
+            ['+100'],
+            ['foo'],
+            ['1Ko'],
+            ['1kio'],
+        ];
     }
 
     /**
@@ -117,23 +121,54 @@ class FileTest extends TestCase
      */
     public function testBinaryFormat($maxSize, $guessedFormat, $binaryFormat)
     {
-        $file = new File(array('maxSize' => $maxSize, 'binaryFormat' => $guessedFormat));
+        $file = new File(['maxSize' => $maxSize, 'binaryFormat' => $guessedFormat]);
 
         $this->assertSame($binaryFormat, $file->binaryFormat);
     }
 
-    public function provideFormats()
+    public static function provideFormats()
     {
-        return array(
-            array(100, null, false),
-            array(100, true, true),
-            array(100, false, false),
-            array('100K', null, false),
-            array('100K', true, true),
-            array('100K', false, false),
-            array('100Ki', null, true),
-            array('100Ki', true, true),
-            array('100Ki', false, false),
-        );
+        return [
+            [100, null, false],
+            [100, true, true],
+            [100, false, false],
+            ['100K', null, false],
+            ['100K', true, true],
+            ['100K', false, false],
+            ['100Ki', null, true],
+            ['100Ki', true, true],
+            ['100Ki', false, false],
+        ];
     }
+
+    public function testAttributes()
+    {
+        $metadata = new ClassMetadata(FileDummy::class);
+        self::assertTrue((new AnnotationLoader())->loadClassMetadata($metadata));
+
+        [$aConstraint] = $metadata->properties['a']->getConstraints();
+        self::assertNull($aConstraint->maxSize);
+
+        [$bConstraint] = $metadata->properties['b']->getConstraints();
+        self::assertSame(100, $bConstraint->maxSize);
+        self::assertSame('myMessage', $bConstraint->notFoundMessage);
+        self::assertSame(['Default', 'FileDummy'], $bConstraint->groups);
+
+        [$cConstraint] = $metadata->properties['c']->getConstraints();
+        self::assertSame(100000, $cConstraint->maxSize);
+        self::assertSame(['my_group'], $cConstraint->groups);
+        self::assertSame('some attached data', $cConstraint->payload);
+    }
+}
+
+class FileDummy
+{
+    #[File]
+    private $a;
+
+    #[File(maxSize: 100, notFoundMessage: 'myMessage')]
+    private $b;
+
+    #[File(maxSize: '100K', groups: ['my_group'], payload: 'some attached data')]
+    private $c;
 }

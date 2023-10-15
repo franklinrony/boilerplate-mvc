@@ -22,25 +22,25 @@ use Twig\TokenParser\AbstractTokenParser;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class FormThemeTokenParser extends AbstractTokenParser
+final class FormThemeTokenParser extends AbstractTokenParser
 {
-    /**
-     * Parses a token and returns a node.
-     *
-     * @return Node
-     */
-    public function parse(Token $token)
+    public function parse(Token $token): Node
     {
         $lineno = $token->getLine();
         $stream = $this->parser->getStream();
 
         $form = $this->parser->getExpressionParser()->parseExpression();
+        $only = false;
 
         if ($this->parser->getStream()->test(Token::NAME_TYPE, 'with')) {
             $this->parser->getStream()->next();
             $resources = $this->parser->getExpressionParser()->parseExpression();
+
+            if ($this->parser->getStream()->nextIf(Token::NAME_TYPE, 'only')) {
+                $only = true;
+            }
         } else {
-            $resources = new ArrayExpression(array(), $stream->getCurrent()->getLine());
+            $resources = new ArrayExpression([], $stream->getCurrent()->getLine());
             do {
                 $resources->addElement($this->parser->getExpressionParser()->parseExpression());
             } while (!$stream->test(Token::BLOCK_END_TYPE));
@@ -48,15 +48,10 @@ class FormThemeTokenParser extends AbstractTokenParser
 
         $stream->expect(Token::BLOCK_END_TYPE);
 
-        return new FormThemeNode($form, $resources, $lineno, $this->getTag());
+        return new FormThemeNode($form, $resources, $lineno, $this->getTag(), $only);
     }
 
-    /**
-     * Gets the tag name associated with this token parser.
-     *
-     * @return string The tag name
-     */
-    public function getTag()
+    public function getTag(): string
     {
         return 'form_theme';
     }

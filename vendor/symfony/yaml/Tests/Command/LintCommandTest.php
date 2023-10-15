@@ -13,7 +13,9 @@ namespace Symfony\Component\Yaml\Tests\Command;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Tester\CommandCompletionTester;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Yaml\Command\LintCommand;
 
@@ -34,7 +36,19 @@ class LintCommandTest extends TestCase
         $ret = $tester->execute(['filename' => $filename], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE, 'decorated' => false]);
 
         $this->assertEquals(0, $ret, 'Returns 0 in case of success');
-        $this->assertRegExp('/^\/\/ OK in /', trim($tester->getDisplay()));
+        $this->assertMatchesRegularExpression('/^\/\/ OK in /', trim($tester->getDisplay()));
+    }
+
+    public function testLintCorrectFiles()
+    {
+        $tester = $this->createCommandTester();
+        $filename1 = $this->createFile('foo: bar');
+        $filename2 = $this->createFile('bar: baz');
+
+        $ret = $tester->execute(['filename' => [$filename1, $filename2]], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE, 'decorated' => false]);
+
+        $this->assertEquals(0, $ret, 'Returns 0 in case of success');
+        $this->assertMatchesRegularExpression('/^\/\/ OK in /', trim($tester->getDisplay()));
     }
 
     public function testLintIncorrectFile()
@@ -48,7 +62,45 @@ bar';
         $ret = $tester->execute(['filename' => $filename], ['decorated' => false]);
 
         $this->assertEquals(1, $ret, 'Returns 1 in case of error');
-        $this->assertContains('Unable to parse at line 3 (near "bar").', trim($tester->getDisplay()));
+        $this->assertStringContainsString('Unable to parse at line 3 (near "bar").', trim($tester->getDisplay()));
+    }
+
+    public function testLintIncorrectFileWithGithubFormat()
+    {
+        $incorrectContent = <<<YAML
+foo:
+bar
+YAML;
+        $tester = $this->createCommandTester();
+        $filename = $this->createFile($incorrectContent);
+
+        $tester->execute(['filename' => $filename, '--format' => 'github'], ['decorated' => false]);
+
+        self::assertEquals(1, $tester->getStatusCode(), 'Returns 1 in case of error');
+        self::assertStringMatchesFormat('%A::error file=%s,line=2,col=0::Unable to parse at line 2 (near "bar")%A', trim($tester->getDisplay()));
+    }
+
+    public function testLintAutodetectsGithubActionEnvironment()
+    {
+        $prev = getenv('GITHUB_ACTIONS');
+        putenv('GITHUB_ACTIONS');
+
+        try {
+            putenv('GITHUB_ACTIONS=1');
+
+            $incorrectContent = <<<YAML
+foo:
+bar
+YAML;
+            $tester = $this->createCommandTester();
+            $filename = $this->createFile($incorrectContent);
+
+            $tester->execute(['filename' => $filename], ['decorated' => false]);
+
+            self::assertStringMatchesFormat('%A::error file=%s,line=2,col=0::Unable to parse at line 2 (near "bar")%A', trim($tester->getDisplay()));
+        } finally {
+            putenv('GITHUB_ACTIONS'.($prev ? "=$prev" : ''));
+        }
     }
 
     public function testConstantAsKey()
@@ -78,22 +130,43 @@ YAML;
         $this->assertSame(1, $ret, 'lint:yaml exits with code 1 in case of error');
     }
 
-    /**
-     * @expectedException \RuntimeException
-     */
+    public function testLintWithExclude()
+    {
+        $tester = $this->createCommandTester();
+        $filename1 = $this->createFile('foo: bar');
+        $filename2 = $this->createFile('bar: baz');
+
+        $ret = $tester->execute(['filename' => [$filename1, $filename2], '--exclude' => [$filename1]], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE, 'decorated' => false]);
+        $this->assertSame(0, $ret, 'lint:yaml exits with code 0 in case of success');
+        $this->assertStringContainsString('All 1 YAML files contain valid syntax.', trim($tester->getDisplay()));
+    }
+
     public function testLintFileNotReadable()
     {
+        $this->expectException(\RuntimeException::class);
         $tester = $this->createCommandTester();
         $filename = $this->createFile('');
         unlink($filename);
 
-        $ret = $tester->execute(['filename' => $filename], ['decorated' => false]);
+        $tester->execute(['filename' => $filename], ['decorated' => false]);
     }
 
     /**
-     * @return string Path to the new file
+     * @dataProvider provideCompletionSuggestions
      */
-    private function createFile($content)
+    public function testComplete(array $input, array $expectedSuggestions)
+    {
+        $tester = new CommandCompletionTester($this->createCommand());
+
+        $this->assertSame($expectedSuggestions, $tester->complete($input));
+    }
+
+    public static function provideCompletionSuggestions()
+    {
+        yield 'option' => [['--format', ''], ['txt', 'json', 'github']];
+    }
+
+    private function createFile($content): string
     {
         $filename = tempnam(sys_get_temp_dir().'/framework-yml-lint-test', 'sf-');
         file_put_contents($filename, $content);
@@ -103,37 +176,38 @@ YAML;
         return $filename;
     }
 
-    /**
-     * @return CommandTester
-     */
-    protected function createCommandTester()
+    protected function createCommand(): Command
     {
         $application = new Application();
         $application->add(new LintCommand());
-        $command = $application->find('lint:yaml');
 
-        return new CommandTester($command);
+        return $application->find('lint:yaml');
     }
 
-    protected function setUp()
+    protected function createCommandTester(): CommandTester
+    {
+        return new CommandTester($this->createCommand());
+    }
+
+    protected function setUp(): void
     {
         $this->files = [];
         @mkdir(sys_get_temp_dir().'/framework-yml-lint-test');
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         foreach ($this->files as $file) {
             if (file_exists($file)) {
-                unlink($file);
+                @unlink($file);
             }
         }
 
-        rmdir(sys_get_temp_dir().'/framework-yml-lint-test');
+        @rmdir(sys_get_temp_dir().'/framework-yml-lint-test');
     }
 }
 
 class Foo
 {
-    const TEST = 'foo';
+    public const TEST = 'foo';
 }

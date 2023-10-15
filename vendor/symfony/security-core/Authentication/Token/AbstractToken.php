@@ -11,10 +11,7 @@
 
 namespace Symfony\Component\Security\Core\Authentication\Token;
 
-use Symfony\Component\Security\Core\Role\Role;
-use Symfony\Component\Security\Core\Role\RoleInterface;
-use Symfony\Component\Security\Core\User\AdvancedUserInterface;
-use Symfony\Component\Security\Core\User\EquatableInterface;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
@@ -23,107 +20,49 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * @author Fabien Potencier <fabien@symfony.com>
  * @author Johannes M. Schmitt <schmittjoh@gmail.com>
  */
-abstract class AbstractToken implements TokenInterface
+abstract class AbstractToken implements TokenInterface, \Serializable
 {
-    private $user;
-    private $roles = array();
-    private $authenticated = false;
-    private $attributes = array();
+    private ?UserInterface $user = null;
+    private array $roleNames = [];
+    private array $attributes = [];
 
     /**
-     * @param (RoleInterface|string)[] $roles An array of roles
+     * @param string[] $roles An array of roles
      *
      * @throws \InvalidArgumentException
      */
-    public function __construct(array $roles = array())
+    public function __construct(array $roles = [])
     {
         foreach ($roles as $role) {
-            if (\is_string($role)) {
-                $role = new Role($role);
-            } elseif (!$role instanceof RoleInterface) {
-                throw new \InvalidArgumentException(sprintf('$roles must be an array of strings, or RoleInterface instances, but got %s.', \gettype($role)));
-            }
-
-            $this->roles[] = $role;
+            $this->roleNames[] = $role;
         }
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getRoles()
+    public function getRoleNames(): array
     {
-        return $this->roles;
+        return $this->roleNames;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getUsername()
+    public function getUserIdentifier(): string
     {
-        if ($this->user instanceof UserInterface) {
-            return $this->user->getUsername();
-        }
-
-        return (string) $this->user;
+        return $this->user ? $this->user->getUserIdentifier() : '';
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getUser()
+    public function getUser(): ?UserInterface
     {
         return $this->user;
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
-    public function setUser($user)
+    public function setUser(UserInterface $user)
     {
-        if (!($user instanceof UserInterface || (\is_object($user) && method_exists($user, '__toString')) || \is_string($user))) {
-            throw new \InvalidArgumentException('$user must be an instanceof UserInterface, an object implementing a __toString method, or a primitive string.');
-        }
-
-        if (null === $this->user) {
-            $changed = false;
-        } elseif ($this->user instanceof UserInterface) {
-            if (!$user instanceof UserInterface) {
-                $changed = true;
-            } else {
-                $changed = $this->hasUserChanged($user);
-            }
-        } elseif ($user instanceof UserInterface) {
-            $changed = true;
-        } else {
-            $changed = (string) $this->user !== (string) $user;
-        }
-
-        if ($changed) {
-            $this->setAuthenticated(false);
-        }
-
         $this->user = $user;
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function isAuthenticated()
-    {
-        return $this->authenticated;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setAuthenticated($authenticated)
-    {
-        $this->authenticated = (bool) $authenticated;
-    }
-
-    /**
-     * {@inheritdoc}
+     * @return void
      */
     public function eraseCredentials()
     {
@@ -133,72 +72,68 @@ abstract class AbstractToken implements TokenInterface
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function serialize()
-    {
-        return serialize(
-            array(
-                \is_object($this->user) ? clone $this->user : $this->user,
-                $this->authenticated,
-                array_map(function ($role) { return clone $role; }, $this->roles),
-                $this->attributes,
-            )
-        );
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function unserialize($serialized)
-    {
-        list($this->user, $this->authenticated, $this->roles, $this->attributes) = unserialize($serialized);
-    }
-
-    /**
-     * Returns the token attributes.
+     * Returns all the necessary state of the object for serialization purposes.
      *
-     * @return array The token attributes
+     * There is no need to serialize any entry, they should be returned as-is.
+     * If you extend this method, keep in mind you MUST guarantee parent data is present in the state.
+     * Here is an example of how to extend this method:
+     * <code>
+     *     public function __serialize(): array
+     *     {
+     *         return [$this->childAttribute, parent::__serialize()];
+     *     }
+     * </code>
+     *
+     * @see __unserialize()
      */
-    public function getAttributes()
+    public function __serialize(): array
+    {
+        return [$this->user, true, null, $this->attributes, $this->roleNames];
+    }
+
+    /**
+     * Restores the object state from an array given by __serialize().
+     *
+     * There is no need to unserialize any entry in $data, they are already ready-to-use.
+     * If you extend this method, keep in mind you MUST pass the parent data to its respective class.
+     * Here is an example of how to extend this method:
+     * <code>
+     *     public function __unserialize(array $data): void
+     *     {
+     *         [$this->childAttribute, $parentData] = $data;
+     *         parent::__unserialize($parentData);
+     *     }
+     * </code>
+     *
+     * @see __serialize()
+     */
+    public function __unserialize(array $data): void
+    {
+        [$user, , , $this->attributes, $this->roleNames] = $data;
+        $this->user = \is_string($user) ? new InMemoryUser($user, '', $this->roleNames, false) : $user;
+    }
+
+    public function getAttributes(): array
     {
         return $this->attributes;
     }
 
     /**
-     * Sets the token attributes.
-     *
-     * @param array $attributes The token attributes
+     * @return void
      */
     public function setAttributes(array $attributes)
     {
         $this->attributes = $attributes;
     }
 
-    /**
-     * Returns true if the attribute exists.
-     *
-     * @param string $name The attribute name
-     *
-     * @return bool true if the attribute exists, false otherwise
-     */
-    public function hasAttribute($name)
+    public function hasAttribute(string $name): bool
     {
-        return array_key_exists($name, $this->attributes);
+        return \array_key_exists($name, $this->attributes);
     }
 
-    /**
-     * Returns an attribute value.
-     *
-     * @param string $name The attribute name
-     *
-     * @return mixed The attribute value
-     *
-     * @throws \InvalidArgumentException When attribute doesn't exist for this token
-     */
-    public function getAttribute($name)
+    public function getAttribute(string $name): mixed
     {
-        if (!array_key_exists($name, $this->attributes)) {
+        if (!\array_key_exists($name, $this->attributes)) {
             throw new \InvalidArgumentException(sprintf('This token has no "%s" attribute.', $name));
         }
 
@@ -206,74 +141,39 @@ abstract class AbstractToken implements TokenInterface
     }
 
     /**
-     * Sets an attribute.
-     *
-     * @param string $name  The attribute name
-     * @param mixed  $value The attribute value
+     * @return void
      */
-    public function setAttribute($name, $value)
+    public function setAttribute(string $name, mixed $value)
     {
         $this->attributes[$name] = $value;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function __toString()
+    public function __toString(): string
     {
-        $class = \get_class($this);
+        $class = static::class;
         $class = substr($class, strrpos($class, '\\') + 1);
 
-        $roles = array();
-        foreach ($this->roles as $role) {
-            $roles[] = $role->getRole();
+        $roles = [];
+        foreach ($this->roleNames as $role) {
+            $roles[] = $role;
         }
 
-        return sprintf('%s(user="%s", authenticated=%s, roles="%s")', $class, $this->getUsername(), json_encode($this->authenticated), implode(', ', $roles));
+        return sprintf('%s(user="%s", roles="%s")', $class, $this->getUserIdentifier(), implode(', ', $roles));
     }
 
-    private function hasUserChanged(UserInterface $user)
+    /**
+     * @internal
+     */
+    final public function serialize(): string
     {
-        if (!($this->user instanceof UserInterface)) {
-            throw new \BadMethodCallException('Method "hasUserChanged" should be called when current user class is instance of "UserInterface".');
-        }
+        throw new \BadMethodCallException('Cannot serialize '.__CLASS__);
+    }
 
-        if ($this->user instanceof EquatableInterface) {
-            return !(bool) $this->user->isEqualTo($user);
-        }
-
-        if ($this->user->getPassword() !== $user->getPassword()) {
-            return true;
-        }
-
-        if ($this->user->getSalt() !== $user->getSalt()) {
-            return true;
-        }
-
-        if ($this->user->getUsername() !== $user->getUsername()) {
-            return true;
-        }
-
-        if ($this->user instanceof AdvancedUserInterface && $user instanceof AdvancedUserInterface) {
-            if ($this->user->isAccountNonExpired() !== $user->isAccountNonExpired()) {
-                return true;
-            }
-
-            if ($this->user->isAccountNonLocked() !== $user->isAccountNonLocked()) {
-                return true;
-            }
-
-            if ($this->user->isCredentialsNonExpired() !== $user->isCredentialsNonExpired()) {
-                return true;
-            }
-
-            if ($this->user->isEnabled() !== $user->isEnabled()) {
-                return true;
-            }
-        } elseif ($this->user instanceof AdvancedUserInterface xor $user instanceof AdvancedUserInterface) {
-            return true;
-        }
-
-        return false;
+    /**
+     * @internal
+     */
+    final public function unserialize(string $serialized): void
+    {
+        $this->__unserialize(unserialize($serialized));
     }
 }

@@ -23,30 +23,24 @@ use Symfony\Component\Filesystem\Filesystem;
  */
 class ResourceCheckerConfigCache implements ConfigCacheInterface
 {
-    /**
-     * @var string
-     */
-    private $file;
+    private string $file;
 
     /**
-     * @var iterable|ResourceCheckerInterface[]
+     * @var iterable<mixed, ResourceCheckerInterface>
      */
-    private $resourceCheckers;
+    private iterable $resourceCheckers;
 
     /**
-     * @param string                              $file             The absolute cache path
-     * @param iterable|ResourceCheckerInterface[] $resourceCheckers The ResourceCheckers to use for the freshness check
+     * @param string                                    $file             The absolute cache path
+     * @param iterable<mixed, ResourceCheckerInterface> $resourceCheckers The ResourceCheckers to use for the freshness check
      */
-    public function __construct($file, $resourceCheckers = [])
+    public function __construct(string $file, iterable $resourceCheckers = [])
     {
         $this->file = $file;
         $this->resourceCheckers = $resourceCheckers;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getPath()
+    public function getPath(): string
     {
         return $this->file;
     }
@@ -59,10 +53,8 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
      *
      * The first ResourceChecker that supports a given resource is considered authoritative.
      * Resources with no matching ResourceChecker will silently be ignored and considered fresh.
-     *
-     * @return bool true if the cache is fresh, false otherwise
      */
-    public function isFresh()
+    public function isFresh(): bool
     {
         if (!is_file($this->file)) {
             return false;
@@ -91,7 +83,6 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
         $time = filemtime($this->file);
 
         foreach ($meta as $resource) {
-            /* @var ResourceInterface $resource */
             foreach ($this->resourceCheckers as $checker) {
                 if (!$checker->supports($resource)) {
                     continue; // next checker
@@ -114,9 +105,11 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
      * @param string              $content  The content to write in the cache
      * @param ResourceInterface[] $metadata An array of metadata
      *
+     * @return void
+     *
      * @throws \RuntimeException When cache file can't be written
      */
-    public function write($content, array $metadata = null)
+    public function write(string $content, array $metadata = null)
     {
         $mode = 0666;
         $umask = umask();
@@ -124,7 +117,7 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
         $filesystem->dumpFile($this->file, $content);
         try {
             $filesystem->chmod($this->file, $mode, $umask);
-        } catch (IOException $e) {
+        } catch (IOException) {
             // discard chmod failure (some filesystem may not support it)
         }
 
@@ -132,33 +125,30 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
             $filesystem->dumpFile($this->getMetaFile(), serialize($metadata));
             try {
                 $filesystem->chmod($this->getMetaFile(), $mode, $umask);
-            } catch (IOException $e) {
+            } catch (IOException) {
                 // discard chmod failure (some filesystem may not support it)
             }
         }
 
-        if (\function_exists('opcache_invalidate') && filter_var(ini_get('opcache.enable'), FILTER_VALIDATE_BOOLEAN)) {
+        if (\function_exists('opcache_invalidate') && filter_var(\ini_get('opcache.enable'), \FILTER_VALIDATE_BOOL)) {
             @opcache_invalidate($this->file, true);
         }
     }
 
     /**
      * Gets the meta file path.
-     *
-     * @return string The meta file path
      */
-    private function getMetaFile()
+    private function getMetaFile(): string
     {
         return $this->file.'.meta';
     }
 
-    private function safelyUnserialize($file)
+    private function safelyUnserialize(string $file): mixed
     {
-        $e = null;
         $meta = false;
         $content = file_get_contents($file);
         $signalingException = new \UnexpectedValueException();
-        $prevUnserializeHandler = ini_set('unserialize_callback_func', '');
+        $prevUnserializeHandler = ini_set('unserialize_callback_func', self::class.'::handleUnserializeCallback');
         $prevErrorHandler = set_error_handler(function ($type, $msg, $file, $line, $context = []) use (&$prevErrorHandler, $signalingException) {
             if (__FILE__ === $file) {
                 throw $signalingException;
@@ -169,15 +159,23 @@ class ResourceCheckerConfigCache implements ConfigCacheInterface
 
         try {
             $meta = unserialize($content);
-        } catch (\Error $e) {
-        } catch (\Exception $e) {
-        }
-        restore_error_handler();
-        ini_set('unserialize_callback_func', $prevUnserializeHandler);
-        if (null !== $e && $e !== $signalingException) {
-            throw $e;
+        } catch (\Throwable $e) {
+            if ($e !== $signalingException) {
+                throw $e;
+            }
+        } finally {
+            restore_error_handler();
+            ini_set('unserialize_callback_func', $prevUnserializeHandler);
         }
 
         return $meta;
+    }
+
+    /**
+     * @internal
+     */
+    public static function handleUnserializeCallback(string $class): void
+    {
+        trigger_error('Class not found: '.$class);
     }
 }

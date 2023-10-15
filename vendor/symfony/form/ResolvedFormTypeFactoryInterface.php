@@ -25,14 +25,10 @@ interface ResolvedFormTypeFactoryInterface
     /**
      * Resolves a form type.
      *
-     * @param FormTypeInterface              $type
-     * @param FormTypeExtensionInterface[]   $typeExtensions
-     * @param ResolvedFormTypeInterface|null $parent
-     *
-     * @return ResolvedFormTypeInterface
+     * @param FormTypeExtensionInterface[] $typeExtensions
      *
      * @throws Exception\UnexpectedTypeException  if the types parent {@link FormTypeInterface::getParent()} is not a string
-     * @throws Exception\InvalidArgumentException if the types parent can not be retrieved from any extension
+     * @throws Exception\InvalidArgumentException if the types parent cannot be retrieved from any extension
      */
-    public function createResolvedType(FormTypeInterface $type, array $typeExtensions, ResolvedFormTypeInterface $parent = null);
+    public function createResolvedType(FormTypeInterface $type, array $typeExtensions, ResolvedFormTypeInterface $parent = null): ResolvedFormTypeInterface;
 }

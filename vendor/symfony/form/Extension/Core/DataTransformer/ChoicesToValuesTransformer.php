@@ -11,16 +11,18 @@
 
 namespace Symfony\Component\Form\Extension\Core\DataTransformer;
 
-use Symfony\Component\Form\Exception\TransformationFailedException;
-use Symfony\Component\Form\DataTransformerInterface;
 use Symfony\Component\Form\ChoiceList\ChoiceListInterface;
+use Symfony\Component\Form\DataTransformerInterface;
+use Symfony\Component\Form\Exception\TransformationFailedException;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
+ *
+ * @implements DataTransformerInterface<array, array>
  */
 class ChoicesToValuesTransformer implements DataTransformerInterface
 {
-    private $choiceList;
+    private ChoiceListInterface $choiceList;
 
     public function __construct(ChoiceListInterface $choiceList)
     {
@@ -28,17 +30,15 @@ class ChoicesToValuesTransformer implements DataTransformerInterface
     }
 
     /**
-     * @return array
-     *
      * @throws TransformationFailedException if the given value is not an array
      */
-    public function transform($array)
+    public function transform(mixed $array): array
     {
         if (null === $array) {
-            return array();
+            return [];
         }
 
-        if (!is_array($array)) {
+        if (!\is_array($array)) {
             throw new TransformationFailedException('Expected an array.');
         }
 
@@ -46,26 +46,24 @@ class ChoicesToValuesTransformer implements DataTransformerInterface
     }
 
     /**
-     * @return array
-     *
      * @throws TransformationFailedException if the given value is not an array
      *                                       or if no matching choice could be
      *                                       found for some given value
      */
-    public function reverseTransform($array)
+    public function reverseTransform(mixed $array): array
     {
         if (null === $array) {
-            return array();
+            return [];
         }
 
-        if (!is_array($array)) {
+        if (!\is_array($array)) {
             throw new TransformationFailedException('Expected an array.');
         }
 
         $choices = $this->choiceList->getChoicesForValues($array);
 
-        if (count($choices) !== count($array)) {
-            throw new TransformationFailedException('Could not find all matching choices for the given values');
+        if (\count($choices) !== \count($array)) {
+            throw new TransformationFailedException('Could not find all matching choices for the given values.');
         }
 
         return $choices;

@@ -14,8 +14,8 @@ namespace Symfony\Component\Validator;
 /**
  * Prepares an object for validation.
  *
- * Concrete implementations of this interface are used by {@link ValidationVisitorInterface}
- * and {@link Validator\ContextualValidatorInterface} to initialize objects just before validating them.
+ * Concrete implementations of this interface are used by {@link Validator\ContextualValidatorInterface}
+ * to initialize objects just before validating them.
  *
  * @author Fabien Potencier <fabien@symfony.com>
  * @author Bernhard Schussek <bschussek@gmail.com>
@@ -23,9 +23,7 @@ namespace Symfony\Component\Validator;
 interface ObjectInitializerInterface
 {
     /**
-     * Initializes an object just before validation.
-     *
-     * @param object $object The object to validate
+     * @return void
      */
-    public function initialize($object);
+    public function initialize(object $object);
 }

@@ -12,56 +12,73 @@
 namespace Symfony\Component\Form\Extension\Core\Type;
 
 use Symfony\Component\Form\AbstractType;
-use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\Extension\Core\DataTransformer\PercentToLocalizedStringTransformer;
-use Symfony\Component\OptionsResolver\Options;
+use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\Form\FormInterface;
+use Symfony\Component\Form\FormView;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class PercentType extends AbstractType
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
-        $builder->addViewTransformer(new PercentToLocalizedStringTransformer($options['scale'], $options['type']));
+        $builder->addViewTransformer(new PercentToLocalizedStringTransformer(
+            $options['scale'],
+            $options['type'],
+            $options['rounding_mode'],
+            $options['html5']
+        ));
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
+     */
+    public function buildView(FormView $view, FormInterface $form, array $options)
+    {
+        $view->vars['symbol'] = $options['symbol'];
+
+        if ($options['html5']) {
+            $view->vars['type'] = 'number';
+        }
+    }
+
+    /**
+     * @return void
      */
     public function configureOptions(OptionsResolver $resolver)
     {
-        $scale = function (Options $options) {
-            if (null !== $options['precision']) {
-                @trigger_error('The form option "precision" is deprecated since Symfony 2.7 and will be removed in 3.0. Use "scale" instead.', E_USER_DEPRECATED);
-
-                return $options['precision'];
-            }
-
-            return 0;
-        };
-
-        $resolver->setDefaults(array(
-            // deprecated as of Symfony 2.7, to be removed in Symfony 3.0.
-            'precision' => null,
-            'scale' => $scale,
+        $resolver->setDefaults([
+            'scale' => 0,
+            'rounding_mode' => \NumberFormatter::ROUND_HALFUP,
+            'symbol' => '%',
             'type' => 'fractional',
             'compound' => false,
-        ));
+            'html5' => false,
+            'invalid_message' => 'Please enter a percentage value.',
+        ]);
 
-        $resolver->setAllowedValues('type', array(
+        $resolver->setAllowedValues('type', [
             'fractional',
             'integer',
-        ));
-
+        ]);
+        $resolver->setAllowedValues('rounding_mode', [
+            \NumberFormatter::ROUND_FLOOR,
+            \NumberFormatter::ROUND_DOWN,
+            \NumberFormatter::ROUND_HALFDOWN,
+            \NumberFormatter::ROUND_HALFEVEN,
+            \NumberFormatter::ROUND_HALFUP,
+            \NumberFormatter::ROUND_UP,
+            \NumberFormatter::ROUND_CEILING,
+        ]);
         $resolver->setAllowedTypes('scale', 'int');
+        $resolver->setAllowedTypes('symbol', ['bool', 'string']);
+        $resolver->setAllowedTypes('html5', 'bool');
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getBlockPrefix(): string
     {
         return 'percent';
     }

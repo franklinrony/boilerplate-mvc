@@ -11,71 +11,56 @@
 
 namespace Symfony\Component\Form;
 
-use Symfony\Component\Form\Guess\Guess;
 use Symfony\Component\Form\Exception\UnexpectedTypeException;
+use Symfony\Component\Form\Guess\Guess;
+use Symfony\Component\Form\Guess\TypeGuess;
+use Symfony\Component\Form\Guess\ValueGuess;
 
 class FormTypeGuesserChain implements FormTypeGuesserInterface
 {
-    private $guessers = array();
+    private array $guessers = [];
 
     /**
-     * @param FormTypeGuesserInterface[] $guessers Guessers as instances of FormTypeGuesserInterface
+     * @param FormTypeGuesserInterface[] $guessers
      *
      * @throws UnexpectedTypeException if any guesser does not implement FormTypeGuesserInterface
      */
-    public function __construct(array $guessers)
+    public function __construct(iterable $guessers)
     {
+        $tmpGuessers = [];
         foreach ($guessers as $guesser) {
             if (!$guesser instanceof FormTypeGuesserInterface) {
-                throw new UnexpectedTypeException($guesser, 'Symfony\Component\Form\FormTypeGuesserInterface');
+                throw new UnexpectedTypeException($guesser, FormTypeGuesserInterface::class);
             }
 
             if ($guesser instanceof self) {
-                $this->guessers = array_merge($this->guessers, $guesser->guessers);
+                $tmpGuessers[] = $guesser->guessers;
             } else {
-                $this->guessers[] = $guesser;
+                $tmpGuessers[] = [$guesser];
             }
         }
+
+        $this->guessers = array_merge([], ...$tmpGuessers);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function guessType($class, $property)
+    public function guessType(string $class, string $property): ?TypeGuess
     {
-        return $this->guess(function ($guesser) use ($class, $property) {
-            return $guesser->guessType($class, $property);
-        });
+        return $this->guess(static fn ($guesser) => $guesser->guessType($class, $property));
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function guessRequired($class, $property)
+    public function guessRequired(string $class, string $property): ?ValueGuess
     {
-        return $this->guess(function ($guesser) use ($class, $property) {
-            return $guesser->guessRequired($class, $property);
-        });
+        return $this->guess(static fn ($guesser) => $guesser->guessRequired($class, $property));
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function guessMaxLength($class, $property)
+    public function guessMaxLength(string $class, string $property): ?ValueGuess
     {
-        return $this->guess(function ($guesser) use ($class, $property) {
-            return $guesser->guessMaxLength($class, $property);
-        });
+        return $this->guess(static fn ($guesser) => $guesser->guessMaxLength($class, $property));
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function guessPattern($class, $property)
+    public function guessPattern(string $class, string $property): ?ValueGuess
     {
-        return $this->guess(function ($guesser) use ($class, $property) {
-            return $guesser->guessPattern($class, $property);
-        });
+        return $this->guess(static fn ($guesser) => $guesser->guessPattern($class, $property));
     }
 
     /**
@@ -84,12 +69,10 @@ class FormTypeGuesserChain implements FormTypeGuesserInterface
      *
      * @param \Closure $closure The closure to execute. Accepts a guesser
      *                          as argument and should return a Guess instance
-     *
-     * @return Guess|null The guess with the highest confidence
      */
-    private function guess(\Closure $closure)
+    private function guess(\Closure $closure): ?Guess
     {
-        $guesses = array();
+        $guesses = [];
 
         foreach ($this->guessers as $guesser) {
             if ($guess = $closure($guesser)) {

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -15,49 +17,25 @@
 namespace Cake\Database\Type;
 
 use Cake\Database\Driver;
-use Cake\Database\Type;
-use Cake\Database\TypeInterface;
-use Cake\Database\Type\BatchCastingInterface;
+use Cake\Database\Exception\DatabaseException;
+use Cake\I18n\Number;
 use InvalidArgumentException;
 use PDO;
-use RuntimeException;
+use Stringable;
 
 /**
  * Decimal type converter.
  *
  * Use to convert decimal data between PHP and the database types.
  */
-class DecimalType extends Type implements TypeInterface, BatchCastingInterface
+class DecimalType extends BaseType implements BatchCastingInterface
 {
-    /**
-     * Identifier name for this type.
-     *
-     * (This property is declared here again so that the inheritance from
-     * Cake\Database\Type can be removed in the future.)
-     *
-     * @var string|null
-     */
-    protected $_name;
-
-    /**
-     * Constructor.
-     *
-     * (This method is declared here again so that the inheritance from
-     * Cake\Database\Type can be removed in the future.)
-     *
-     * @param string|null $name The name identifying this type
-     */
-    public function __construct($name = null)
-    {
-        $this->_name = $name;
-    }
-
     /**
      * The class to use for representing number objects
      *
      * @var string
      */
-    public static $numberClass = 'Cake\I18n\Number';
+    public static string $numberClass = Number::class;
 
     /**
      * Whether numbers should be parsed using a locale aware parser
@@ -65,88 +43,87 @@ class DecimalType extends Type implements TypeInterface, BatchCastingInterface
      *
      * @var bool
      */
-    protected $_useLocaleParser = false;
+    protected bool $_useLocaleParser = false;
 
     /**
-     * Convert integer data into the database format.
+     * Convert decimal strings into the database format.
      *
-     * @param string|int|float $value The value to convert.
+     * @param mixed $value The value to convert.
      * @param \Cake\Database\Driver $driver The driver instance to convert with.
-     * @return string|null
+     * @return string|float|int|null
      * @throws \InvalidArgumentException
      */
-    public function toDatabase($value, Driver $driver)
+    public function toDatabase(mixed $value, Driver $driver): string|float|int|null
     {
         if ($value === null || $value === '') {
             return null;
         }
-        if (!is_scalar($value)) {
-            throw new InvalidArgumentException(sprintf(
-                'Cannot convert value of type `%s` to a decimal',
-                getTypeName($value)
-            ));
-        }
-        if (is_string($value) && is_numeric($value)) {
+
+        if (is_numeric($value)) {
             return $value;
         }
 
-        return sprintf('%F', $value);
-    }
+        if ($value instanceof Stringable) {
+            $str = (string)$value;
 
-    /**
-     * Convert float values to PHP floats
-     *
-     * @param null|string|resource $value The value to convert.
-     * @param \Cake\Database\Driver $driver The driver instance to convert with.
-     * @return float|null
-     * @throws \Cake\Core\Exception\Exception
-     */
-    public function toPHP($value, Driver $driver)
-    {
-        if ($value === null) {
-            return $value;
+            if (is_numeric($str)) {
+                return $str;
+            }
         }
 
-        return (float)$value;
+        throw new InvalidArgumentException(sprintf(
+            'Cannot convert value of type `%s` to a decimal',
+            get_debug_type($value)
+        ));
     }
 
     /**
      * {@inheritDoc}
      *
-     * @return array
+     * @param mixed $value The value to convert.
+     * @param \Cake\Database\Driver $driver The driver instance to convert with.
+     * @return string|null
      */
-    public function manyToPHP(array $values, array $fields, Driver $driver)
+    public function toPHP(mixed $value, Driver $driver): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return (string)$value;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function manyToPHP(array $values, array $fields, Driver $driver): array
     {
         foreach ($fields as $field) {
             if (!isset($values[$field])) {
                 continue;
             }
 
-            $values[$field] = (float)$values[$field];
+            $values[$field] = (string)$values[$field];
         }
 
         return $values;
     }
 
     /**
-     * Get the correct PDO binding type for integer data.
-     *
-     * @param mixed $value The value being bound.
-     * @param \Cake\Database\Driver $driver The driver.
-     * @return int
+     * @inheritDoc
      */
-    public function toStatement($value, Driver $driver)
+    public function toStatement(mixed $value, Driver $driver): int
     {
         return PDO::PARAM_STR;
     }
 
     /**
-     * Marshalls request data into PHP floats.
+     * Marshalls request data into decimal strings.
      *
      * @param mixed $value The value to convert.
-     * @return mixed Converted value.
+     * @return string|null Converted value.
      */
-    public function marshal($value)
+    public function marshal(mixed $value): ?string
     {
         if ($value === null || $value === '') {
             return null;
@@ -155,7 +132,7 @@ class DecimalType extends Type implements TypeInterface, BatchCastingInterface
             return $this->_parseValue($value);
         }
         if (is_numeric($value)) {
-            return (float)$value;
+            return (string)$value;
         }
         if (is_string($value) && preg_match('/^[0-9,. ]+$/', $value)) {
             return $value;
@@ -165,43 +142,45 @@ class DecimalType extends Type implements TypeInterface, BatchCastingInterface
     }
 
     /**
-     * Sets whether or not to parse numbers passed to the marshal() function
+     * Sets whether to parse numbers passed to the marshal() function
      * by using a locale aware parser.
      *
-     * @param bool $enable Whether or not to enable
+     * @param bool $enable Whether to enable
      * @return $this
+     * @throws \Cake\Database\Exception\DatabaseException
      */
-    public function useLocaleParser($enable = true)
+    public function useLocaleParser(bool $enable = true)
     {
         if ($enable === false) {
             $this->_useLocaleParser = $enable;
 
             return $this;
         }
-        if (static::$numberClass === 'Cake\I18n\Number' ||
-            is_subclass_of(static::$numberClass, 'Cake\I18n\Number')
+        if (
+            static::$numberClass === Number::class ||
+            is_subclass_of(static::$numberClass, Number::class)
         ) {
             $this->_useLocaleParser = $enable;
 
             return $this;
         }
-        throw new RuntimeException(
+        throw new DatabaseException(
             sprintf('Cannot use locale parsing with the %s class', static::$numberClass)
         );
     }
 
     /**
-     * Converts a string into a float point after parsing it using the locale
-     * aware parser.
+     * Converts localized string into a decimal string after parsing it using
+     * the locale aware parser.
      *
      * @param string $value The value to parse and convert to an float.
-     * @return float
+     * @return string
      */
-    protected function _parseValue($value)
+    protected function _parseValue(string $value): string
     {
-        /* @var \Cake\I18n\Number $class */
+        /** @var \Cake\I18n\Number $class */
         $class = static::$numberClass;
 
-        return $class::parseFloat($value);
+        return (string)$class::parseFloat($value);
     }
 }

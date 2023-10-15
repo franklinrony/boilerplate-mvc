@@ -15,13 +15,8 @@ use Symfony\Component\Form\AbstractType;
 
 class FooSubType extends AbstractType
 {
-    public function getName()
+    public function getParent(): ?string
     {
-        return 'foo_sub_type';
-    }
-
-    public function getParent()
-    {
-        return 'foo';
+        return FooType::class;
     }
 }

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -16,74 +18,73 @@ namespace Cake\Database\Expression;
 
 use Cake\Database\ExpressionInterface;
 use Cake\Database\ValueBinder;
+use Closure;
 
 /**
  * An expression object that represents an expression with only a single operand.
  */
 class UnaryExpression implements ExpressionInterface
 {
-
     /**
      * Indicates that the operation is in pre-order
      *
+     * @var int
      */
-    const PREFIX = 0;
+    public const PREFIX = 0;
 
     /**
      * Indicates that the operation is in post-order
      *
+     * @var int
      */
-    const POSTFIX = 1;
+    public const POSTFIX = 1;
 
     /**
      * The operator this unary expression represents
      *
      * @var string
      */
-    protected $_operator;
+    protected string $_operator;
 
     /**
      * Holds the value which the unary expression operates
      *
      * @var mixed
      */
-    protected $_value;
+    protected mixed $_value;
 
     /**
      * Where to place the operator
      *
      * @var int
      */
-    protected $_mode;
+    protected int $position;
 
     /**
      * Constructor
      *
      * @param string $operator The operator to used for the expression
      * @param mixed $value the value to use as the operand for the expression
-     * @param int $mode either UnaryExpression::PREFIX or UnaryExpression::POSTFIX
+     * @param int $position either UnaryExpression::PREFIX or UnaryExpression::POSTFIX
      */
-    public function __construct($operator, $value, $mode = self::PREFIX)
+    public function __construct(string $operator, mixed $value, int $position = self::PREFIX)
     {
         $this->_operator = $operator;
         $this->_value = $value;
-        $this->_mode = $mode;
+        $this->position = $position;
     }
 
     /**
-     * Converts the expression to its string representation
-     *
-     * @param \Cake\Database\ValueBinder $generator Placeholder generator object
-     * @return string
+     * @inheritDoc
      */
-    public function sql(ValueBinder $generator)
+    public function sql(ValueBinder $binder): string
     {
         $operand = $this->_value;
         if ($operand instanceof ExpressionInterface) {
-            $operand = $operand->sql($generator);
+            $operand = $operand->sql($binder);
         }
 
-        if ($this->_mode === self::POSTFIX) {
+        if ($this->position === self::POSTFIX) {
             return '(' . $operand . ') ' . $this->_operator;
         }
 
@@ -91,15 +92,16 @@ class UnaryExpression implements ExpressionInterface
     }
 
     /**
-     * {@inheritDoc}
-     *
+     * @inheritDoc
      */
-    public function traverse(callable $callable)
+    public function traverse(Closure $callback)
     {
         if ($this->_value instanceof ExpressionInterface) {
-            $callable($this->_value);
-            $this->_value->traverse($callable);
+            $callback($this->_value);
+            $this->_value->traverse($callback);
         }
+
+        return $this;
     }
 
     /**

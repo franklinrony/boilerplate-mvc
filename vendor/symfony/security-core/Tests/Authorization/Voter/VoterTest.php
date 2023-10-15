@@ -20,52 +20,101 @@ class VoterTest extends TestCase
 {
     protected $token;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->token = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
+        $this->token = $this->createMock(TokenInterface::class);
     }
 
-    public function getTests()
+    public static function getTests(): array
     {
-        return array(
-            array(array('EDIT'), VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if attribute and class are supported and attribute grants access'),
-            array(array('CREATE'), VoterInterface::ACCESS_DENIED, new \stdClass(), 'ACCESS_DENIED if attribute and class are supported and attribute does not grant access'),
+        $voter = new VoterTest_Voter();
+        $integerVoter = new IntegerVoterTest_Voter();
 
-            array(array('DELETE', 'EDIT'), VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if one attribute is supported and grants access'),
-            array(array('DELETE', 'CREATE'), VoterInterface::ACCESS_DENIED, new \stdClass(), 'ACCESS_DENIED if one attribute is supported and denies access'),
+        return [
+            [$voter, ['EDIT'], VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if attribute and class are supported and attribute grants access'],
+            [$voter, ['CREATE'], VoterInterface::ACCESS_DENIED, new \stdClass(), 'ACCESS_DENIED if attribute and class are supported and attribute does not grant access'],
 
-            array(array('CREATE', 'EDIT'), VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if one attribute grants access'),
+            [$voter, ['DELETE', 'EDIT'], VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if one attribute is supported and grants access'],
+            [$voter, ['DELETE', 'CREATE'], VoterInterface::ACCESS_DENIED, new \stdClass(), 'ACCESS_DENIED if one attribute is supported and denies access'],
 
-            array(array('DELETE'), VoterInterface::ACCESS_ABSTAIN, new \stdClass(), 'ACCESS_ABSTAIN if no attribute is supported'),
+            [$voter, ['CREATE', 'EDIT'], VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if one attribute grants access'],
 
-            array(array('EDIT'), VoterInterface::ACCESS_ABSTAIN, $this, 'ACCESS_ABSTAIN if class is not supported'),
+            [$voter, ['DELETE'], VoterInterface::ACCESS_ABSTAIN, new \stdClass(), 'ACCESS_ABSTAIN if no attribute is supported'],
 
-            array(array('EDIT'), VoterInterface::ACCESS_ABSTAIN, null, 'ACCESS_ABSTAIN if object is null'),
+            [$voter, ['EDIT'], VoterInterface::ACCESS_ABSTAIN, new class() {}, 'ACCESS_ABSTAIN if class is not supported'],
 
-            array(array(), VoterInterface::ACCESS_ABSTAIN, new \stdClass(), 'ACCESS_ABSTAIN if no attributes were provided'),
-        );
+            [$voter, ['EDIT'], VoterInterface::ACCESS_ABSTAIN, null, 'ACCESS_ABSTAIN if object is null'],
+
+            [$voter, [], VoterInterface::ACCESS_ABSTAIN, new \stdClass(), 'ACCESS_ABSTAIN if no attributes were provided'],
+
+            [$voter, [new StringableAttribute()], VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if attribute and class are supported and attribute grants access'],
+
+            [$voter, [new \stdClass()], VoterInterface::ACCESS_ABSTAIN, new \stdClass(), 'ACCESS_ABSTAIN if attributes were not strings'],
+
+            [$integerVoter, [42], VoterInterface::ACCESS_GRANTED, new \stdClass(), 'ACCESS_GRANTED if attribute is an integer'],
+        ];
     }
 
     /**
      * @dataProvider getTests
      */
-    public function testVote(array $attributes, $expectedVote, $object, $message)
+    public function testVote(VoterInterface $voter, array $attributes, $expectedVote, $object, $message)
     {
-        $voter = new VoterTest_Voter();
-
         $this->assertEquals($expectedVote, $voter->vote($this->token, $object, $attributes), $message);
+    }
+
+    public function testVoteWithTypeError()
+    {
+        $this->expectException(\TypeError::class);
+        $this->expectExceptionMessage('Should error');
+        $voter = new TypeErrorVoterTest_Voter();
+        $voter->vote($this->token, new \stdClass(), ['EDIT']);
     }
 }
 
 class VoterTest_Voter extends Voter
 {
-    protected function voteOnAttribute($attribute, $object, TokenInterface $token)
+    protected function voteOnAttribute(string $attribute, $object, TokenInterface $token): bool
     {
         return 'EDIT' === $attribute;
     }
 
-    protected function supports($attribute, $object)
+    protected function supports(string $attribute, $object): bool
     {
-        return $object instanceof \stdClass && \in_array($attribute, array('EDIT', 'CREATE'));
+        return $object instanceof \stdClass && \in_array($attribute, ['EDIT', 'CREATE']);
+    }
+}
+
+class IntegerVoterTest_Voter extends Voter
+{
+    protected function voteOnAttribute($attribute, $object, TokenInterface $token): bool
+    {
+        return 42 === $attribute;
+    }
+
+    protected function supports($attribute, $object): bool
+    {
+        return $object instanceof \stdClass && \is_int($attribute);
+    }
+}
+
+class TypeErrorVoterTest_Voter extends Voter
+{
+    protected function voteOnAttribute($attribute, $object, TokenInterface $token): bool
+    {
+        return false;
+    }
+
+    protected function supports($attribute, $object): bool
+    {
+        throw new \TypeError('Should error');
+    }
+}
+
+class StringableAttribute
+{
+    public function __toString(): string
+    {
+        return 'EDIT';
     }
 }

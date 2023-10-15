@@ -20,7 +20,7 @@ class FileResourceTest extends TestCase
     protected $file;
     protected $time;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->file = sys_get_temp_dir().'/tmp.xml';
         $this->time = time();
@@ -28,13 +28,11 @@ class FileResourceTest extends TestCase
         $this->resource = new FileResource($this->file);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
-        if (!file_exists($this->file)) {
-            return;
+        if (file_exists($this->file)) {
+            @unlink($this->file);
         }
-
-        unlink($this->file);
     }
 
     public function testGetResource()
@@ -53,13 +51,11 @@ class FileResourceTest extends TestCase
         $this->assertSame(realpath($this->file), (string) $this->resource);
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     * @expectedExceptionMessageRegExp /The file ".*" does not exist./
-     */
     public function testResourceDoesNotExist()
     {
-        $resource = new FileResource('/____foo/foobar'.mt_rand(1, 999999));
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/The file ".*" does not exist./');
+        new FileResource('/____foo/foobar'.mt_rand(1, 999999));
     }
 
     public function testIsFresh()
@@ -78,7 +74,7 @@ class FileResourceTest extends TestCase
 
     public function testSerializeUnserialize()
     {
-        $unserialized = unserialize(serialize($this->resource));
+        unserialize(serialize($this->resource));
 
         $this->assertSame(realpath($this->file), $this->resource->getResource());
     }

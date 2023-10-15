@@ -25,31 +25,18 @@ class EnumNodeDefinitionTest extends TestCase
         $this->assertEquals(['foo'], $node->getValues());
     }
 
-    public function testWithOneDistinctValue()
-    {
-        $def = new EnumNodeDefinition('foo');
-        $def->values(['foo', 'foo']);
-
-        $node = $def->getNode();
-        $this->assertEquals(['foo'], $node->getValues());
-    }
-
-    /**
-     * @expectedException \RuntimeException
-     * @expectedExceptionMessage You must call ->values() on enum nodes.
-     */
     public function testNoValuesPassed()
     {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('You must call ->values() on enum nodes.');
         $def = new EnumNodeDefinition('foo');
         $def->getNode();
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     * @expectedExceptionMessage ->values() must be called with at least one value.
-     */
     public function testWithNoValues()
     {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('->values() must be called with at least one value.');
         $def = new EnumNodeDefinition('foo');
         $def->values([]);
     }
@@ -67,11 +54,22 @@ class EnumNodeDefinitionTest extends TestCase
     {
         $def = new EnumNodeDefinition('foo');
         $def->values(['foo', 'bar']);
-        $def->setDeprecated('The "%path%" node is deprecated.');
+        $def->setDeprecated('vendor/package', '1.1', 'The "%path%" node is deprecated.');
 
         $node = $def->getNode();
 
         $this->assertTrue($node->isDeprecated());
-        $this->assertSame('The "foo" node is deprecated.', $def->getNode()->getDeprecationMessage($node->getName(), $node->getPath()));
+        $deprecation = $def->getNode()->getDeprecation($node->getName(), $node->getPath());
+        $this->assertSame('The "foo" node is deprecated.', $deprecation['message']);
+        $this->assertSame('vendor/package', $deprecation['package']);
+        $this->assertSame('1.1', $deprecation['version']);
+    }
+
+    public function testSameStringCoercedValuesAreDifferent()
+    {
+        $def = new EnumNodeDefinition('ccc');
+        $def->values(['', false, null]);
+
+        $this->assertSame(['', false, null], $def->getNode()->getValues());
     }
 }

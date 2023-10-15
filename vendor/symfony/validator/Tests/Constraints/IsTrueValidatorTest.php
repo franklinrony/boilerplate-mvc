@@ -13,16 +13,11 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 
 use Symfony\Component\Validator\Constraints\IsTrue;
 use Symfony\Component\Validator\Constraints\IsTrueValidator;
-use Symfony\Component\Validator\Validation;
+use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
-class IsTrueValidatorTest extends AbstractConstraintValidatorTest
+class IsTrueValidatorTest extends ConstraintValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): IsTrueValidator
     {
         return new IsTrueValidator();
     }
@@ -41,16 +36,24 @@ class IsTrueValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    public function testFalseIsInvalid()
+    /**
+     * @dataProvider provideInvalidConstraints
+     */
+    public function testFalseIsInvalid(IsTrue $constraint)
     {
-        $constraint = new IsTrue(array(
-            'message' => 'myMessage',
-        ));
-
         $this->validator->validate(false, $constraint);
 
         $this->buildViolation('myMessage')
             ->setParameter('{{ value }}', 'false')
+            ->setCode(IsTrue::NOT_TRUE_ERROR)
             ->assertRaised();
+    }
+
+    public static function provideInvalidConstraints(): iterable
+    {
+        yield 'Doctrine style' => [new IsTrue([
+            'message' => 'myMessage',
+        ])];
+        yield 'named parameters' => [new IsTrue(message: 'myMessage')];
     }
 }

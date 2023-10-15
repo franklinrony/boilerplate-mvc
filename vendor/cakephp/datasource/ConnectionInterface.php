@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,83 +16,57 @@
  */
 namespace Cake\Datasource;
 
+use Psr\SimpleCache\CacheInterface;
+
 /**
- * This interface defines the methods you can depend on in
- * a connection.
- *
- * @method object getLogger() Get the current logger instance
- * @method $this setLogger($logger) Set the current logger.
- * @method bool supportsDynamicConstraints()
- * @method \Cake\Database\Schema\Collection getSchemaCollection()
- * @method \Cake\Database\Query newQuery()
- * @method \Cake\Database\StatementInterface prepare($sql)
- * @method \Cake\Database\StatementInterface execute($query, $params = [], array $types = [])
- * @method $this enableQueryLogging($value)
- * @method $this disableQueryLogging()
- * @method $this disableSavePoints()
- * @method bool isQueryLoggingEnabled()
- * @method string quote($value, $type = null)
+ * This interface defines the methods you can depend on in a connection.
  */
 interface ConnectionInterface
 {
+    /**
+     * @var string
+     */
+    public const ROLE_WRITE = 'write';
+
+    /**
+     * @var string
+     */
+    public const ROLE_READ = 'read';
+
+    /**
+     * Gets the driver instance.
+     *
+     * @param string $role
+     * @return object
+     */
+    public function getDriver(string $role = self::ROLE_WRITE): object;
+
+    /**
+     * Set a cacher.
+     *
+     * @param \Psr\SimpleCache\CacheInterface $cacher Cacher object
+     * @return $this
+     */
+    public function setCacher(CacheInterface $cacher);
+
+    /**
+     * Get a cacher.
+     *
+     * @return \Psr\SimpleCache\CacheInterface $cacher Cacher object
+     */
+    public function getCacher(): CacheInterface;
+
     /**
      * Get the configuration name for this connection.
      *
      * @return string
      */
-    public function configName();
+    public function configName(): string;
 
     /**
      * Get the configuration data used to create the connection.
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function config();
-
-    /**
-     * Executes a callable function inside a transaction, if any exception occurs
-     * while executing the passed callable, the transaction will be rolled back
-     * If the result of the callable function is `false`, the transaction will
-     * also be rolled back. Otherwise the transaction is committed after executing
-     * the callback.
-     *
-     * The callback will receive the connection instance as its first argument.
-     *
-     * @param callable $transaction The callback to execute within a transaction.
-     * @return mixed The return value of the callback.
-     * @throws \Exception Will re-throw any exception raised in $callback after
-     *   rolling back the transaction.
-     */
-    public function transactional(callable $transaction);
-
-    /**
-     * Run an operation with constraints disabled.
-     *
-     * Constraints should be re-enabled after the callback succeeds/fails.
-     *
-     * @param callable $operation The callback to execute within a transaction.
-     * @return mixed The return value of the callback.
-     * @throws \Exception Will re-throw any exception raised in $callback after
-     *   rolling back the transaction.
-     */
-    public function disableConstraints(callable $operation);
-
-    /**
-     * Enables or disables query logging for this connection.
-     *
-     * @param bool|null $enable whether to turn logging on or disable it.
-     *   Use null to read current value.
-     * @return bool
-     */
-    public function logQueries($enable = null);
-
-    /**
-     * Sets the logger object instance. When called with no arguments
-     * it returns the currently setup logger instance.
-     *
-     * @param object|null $instance logger object instance
-     * @return object logger instance
-     * @deprecated 3.5.0 Will be replaced by getLogger()/setLogger()
-     */
-    public function logger($instance = null);
+    public function config(): array;
 }

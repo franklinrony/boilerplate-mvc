@@ -13,6 +13,7 @@ namespace Symfony\Component\Form\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Form\AbstractExtension;
+use Symfony\Component\Form\FormTypeGuesserInterface;
 use Symfony\Component\Form\Tests\Fixtures\FooType;
 
 class AbstractExtensionTest extends TestCase
@@ -20,36 +21,25 @@ class AbstractExtensionTest extends TestCase
     public function testHasType()
     {
         $loader = new ConcreteExtension();
-        $this->assertTrue($loader->hasType('foo'));
-        $this->assertFalse($loader->hasType('bar'));
+        $this->assertTrue($loader->hasType('Symfony\Component\Form\Tests\Fixtures\FooType'));
+        $this->assertFalse($loader->hasType('foo'));
     }
 
     public function testGetType()
     {
         $loader = new ConcreteExtension();
-        $this->assertInstanceOf('Symfony\Component\Form\Tests\Fixtures\FooType', $loader->getType('foo'));
-    }
-
-    /**
-     * @expectedException        \InvalidArgumentException
-     * @expectedExceptionMessage Custom resolver "Symfony\Component\Form\Tests\Fixtures\CustomOptionsResolver" must extend "Symfony\Component\OptionsResolver\OptionsResolver".
-     */
-    public function testCustomOptionsResolver()
-    {
-        $extension = new Fixtures\FooTypeBarExtension();
-        $resolver = new Fixtures\CustomOptionsResolver();
-        $extension->setDefaultOptions($resolver);
+        $this->assertInstanceOf(FooType::class, $loader->getType('Symfony\Component\Form\Tests\Fixtures\FooType'));
     }
 }
 
 class ConcreteExtension extends AbstractExtension
 {
-    protected function loadTypes()
+    protected function loadTypes(): array
     {
-        return array(new FooType());
+        return [new FooType()];
     }
 
-    protected function loadTypeGuesser()
+    protected function loadTypeGuesser(): ?FormTypeGuesserInterface
     {
     }
 }

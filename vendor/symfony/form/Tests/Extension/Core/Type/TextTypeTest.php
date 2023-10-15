@@ -11,9 +11,9 @@
 
 namespace Symfony\Component\Form\Tests\Extension\Core\Type;
 
-class TextTypeTest extends BaseTypeTest
+class TextTypeTest extends BaseTypeTestCase
 {
-    const TESTED_TYPE = 'text';
+    public const TESTED_TYPE = 'Symfony\Component\Form\Extension\Core\Type\TextType';
 
     public function testSubmitNull($expected = null, $norm = null, $view = null)
     {
@@ -22,22 +22,23 @@ class TextTypeTest extends BaseTypeTest
 
     public function testSubmitNullReturnsNullWithEmptyDataAsString()
     {
-        $form = $this->factory->create(static::TESTED_TYPE, 'name', array(
+        $form = $this->factory->create(static::TESTED_TYPE, 'name', [
             'empty_data' => '',
-        ));
+        ]);
 
         $form->submit(null);
-
-        $this->assertNull($form->getData());
+        $this->assertSame('', $form->getData());
+        $this->assertSame('', $form->getNormData());
+        $this->assertSame('', $form->getViewData());
     }
 
-    public function provideZeros()
+    public static function provideZeros()
     {
-        return array(
-            array(0, '0'),
-            array('0', '0'),
-            array('00000', '00000'),
-        );
+        return [
+            [0, '0'],
+            ['0', '0'],
+            ['00000', '00000'],
+        ];
     }
 
     /**
@@ -47,9 +48,9 @@ class TextTypeTest extends BaseTypeTest
      */
     public function testSetDataThroughParamsWithZero($data, $dataAsString)
     {
-        $form = $this->factory->create(static::TESTED_TYPE, null, array(
+        $form = $this->factory->create(static::TESTED_TYPE, null, [
             'data' => $data,
-        ));
+        ]);
         $view = $form->createView();
 
         $this->assertFalse($form->isEmpty());

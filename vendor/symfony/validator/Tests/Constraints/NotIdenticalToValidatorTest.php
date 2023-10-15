@@ -11,77 +11,86 @@
 
 namespace Symfony\Component\Validator\Tests\Constraints;
 
+use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints\NotIdenticalTo;
 use Symfony\Component\Validator\Constraints\NotIdenticalToValidator;
-use Symfony\Component\Validator\Validation;
 
 /**
  * @author Daniel Holmes <daniel@danielholmes.org>
  */
 class NotIdenticalToValidatorTest extends AbstractComparisonValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): NotIdenticalToValidator
     {
         return new NotIdenticalToValidator();
     }
 
-    protected function createConstraint(array $options = null)
+    protected static function createConstraint(array $options = null): Constraint
     {
         return new NotIdenticalTo($options);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideValidComparisons()
+    protected function getErrorCode(): ?string
     {
-        return array(
-            array(1, 2),
-            array('2', 2),
-            array('22', '333'),
-            array(new \DateTime('2001-01-01'), new \DateTime('2000-01-01')),
-            array(new \DateTime('2000-01-01'), new \DateTime('2000-01-01')),
-            array(new \DateTime('2001-01-01'), '2000-01-01'),
-            array(new \DateTime('2000-01-01'), '2000-01-01'),
-            array(new \DateTime('2001-01-01'), '2000-01-01'),
-            array(new \DateTime('2000-01-01 UTC'), '2000-01-01 UTC'),
-            array(null, 1),
-        );
+        return NotIdenticalTo::IS_IDENTICAL_ERROR;
     }
 
-    public function provideAllInvalidComparisons()
+    public static function provideValidComparisons(): array
     {
-        $this->setDefaultTimezone('UTC');
+        return [
+            [1, 2],
+            ['2', 2],
+            ['22', '333'],
+            [new \DateTime('2001-01-01'), new \DateTime('2000-01-01')],
+            [new \DateTime('2000-01-01'), new \DateTime('2000-01-01')],
+            [new \DateTime('2001-01-01'), '2000-01-01'],
+            [new \DateTime('2000-01-01'), '2000-01-01'],
+            [new \DateTime('2001-01-01'), '2000-01-01'],
+            [new \DateTime('2000-01-01 UTC'), '2000-01-01 UTC'],
+            [null, 1],
+        ];
+    }
+
+    public static function provideValidComparisonsToPropertyPath(): array
+    {
+        return [
+            [0],
+        ];
+    }
+
+    public static function provideAllInvalidComparisons(): array
+    {
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('UTC');
 
         // Don't call addPhp5Dot5Comparisons() automatically, as it does
         // not take care of identical objects
-        $comparisons = $this->provideInvalidComparisons();
+        $comparisons = self::provideInvalidComparisons();
 
-        $this->restoreDefaultTimezone();
+        date_default_timezone_set($timezone);
 
         return $comparisons;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideInvalidComparisons()
+    public static function provideInvalidComparisons(): array
     {
         $date = new \DateTime('2000-01-01');
         $object = new ComparisonTest_Class(2);
 
-        $comparisons = array(
-            array(3, '3', 3, '3', 'integer'),
-            array('a', '"a"', 'a', '"a"', 'string'),
-            array($date, 'Jan 1, 2000, 12:00 AM', $date, 'Jan 1, 2000, 12:00 AM', 'DateTime'),
-            array($object, '2', $object, '2', __NAMESPACE__.'\ComparisonTest_Class'),
-        );
+        $comparisons = [
+            [3, '3', 3, '3', 'int'],
+            ['a', '"a"', 'a', '"a"', 'string'],
+            [$date, 'Jan 1, 2000, 12:00 AM', $date, 'Jan 1, 2000, 12:00 AM', 'DateTime'],
+            [$object, '2', $object, '2', __NAMESPACE__.'\ComparisonTest_Class'],
+        ];
 
         return $comparisons;
+    }
+
+    public static function provideComparisonsToNullValueAtPropertyPath()
+    {
+        return [
+            [5, '5', true],
+        ];
     }
 }

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -29,25 +31,27 @@ use Cake\Event\EventDispatcherInterface;
  */
 trait RulesAwareTrait
 {
-
     /**
      * The domain rules to be applied to entities saved by this table
      *
-     * @var \Cake\Datasource\RulesChecker
+     * @var \Cake\Datasource\RulesChecker|null
      */
-    protected $_rulesChecker;
+    protected ?RulesChecker $_rulesChecker = null;
 
     /**
-     * Returns whether or not the passed entity complies with all the rules stored in
+     * Returns whether the passed entity complies with all the rules stored in
      * the rules checker.
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
      * @param string $operation The operation being run. Either 'create', 'update' or 'delete'.
-     * @param \ArrayObject|array|null $options The options To be passed to the rules.
+     * @param \ArrayObject<string, mixed>|array|null $options The options To be passed to the rules.
      * @return bool
      */
-    public function checkRules(EntityInterface $entity, $operation = RulesChecker::CREATE, $options = null)
-    {
+    public function checkRules(
+        EntityInterface $entity,
+        string $operation = RulesChecker::CREATE,
+        ArrayObject|array|null $options = null
+    ): bool {
         $rules = $this->rulesChecker();
         $options = $options ?: new ArrayObject();
         $options = is_array($options) ? new ArrayObject($options) : $options;
@@ -89,12 +93,17 @@ trait RulesAwareTrait
      * @see \Cake\Datasource\RulesChecker
      * @return \Cake\Datasource\RulesChecker
      */
-    public function rulesChecker()
+    public function rulesChecker(): RulesChecker
     {
         if ($this->_rulesChecker !== null) {
             return $this->_rulesChecker;
         }
-        $class = defined('static::RULES_CLASS') ? static::RULES_CLASS : 'Cake\Datasource\RulesChecker';
+        /** @var class-string<\Cake\Datasource\RulesChecker> $class */
+        $class = defined('static::RULES_CLASS') ? static::RULES_CLASS : RulesChecker::class;
+        /**
+         * @psalm-suppress ArgumentTypeCoercion
+         * @phpstan-ignore-next-line
+         */
         $this->_rulesChecker = $this->buildRules(new $class(['repository' => $this]));
         $this->dispatchEvent('Model.buildRules', ['rules' => $this->_rulesChecker]);
 
@@ -110,7 +119,7 @@ trait RulesAwareTrait
      * @param \Cake\Datasource\RulesChecker $rules The rules object to be modified.
      * @return \Cake\Datasource\RulesChecker
      */
-    public function buildRules(RulesChecker $rules)
+    public function buildRules(RulesChecker $rules): RulesChecker
     {
         return $rules;
     }

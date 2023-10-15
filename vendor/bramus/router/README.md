@@ -1,6 +1,6 @@
 # bramus/router
 
-[![Build Status](https://img.shields.io/travis/bramus/router.svg?style=flat-square)](http://travis-ci.org/bramus/router) [![Source](http://img.shields.io/badge/source-bramus/router-blue.svg?style=flat-square)](https://github.com/bramus/router) [![Version](https://img.shields.io/packagist/v/bramus/router.svg?style=flat-square)](https://packagist.org/packages/bramus/router) [![Downloads](https://img.shields.io/packagist/dt/bramus/router.svg?style=flat-square)](https://packagist.org/packages/bramus/router/stats) [![License](https://img.shields.io/packagist/l/bramus/router.svg?style=flat-square)](https://github.com/bramus/router/blob/master/LICENSE)
+[![Build Status](https://github.com/bramus/router/workflows/CI/badge.svg)](https://github.com/bramus/router/actions) [![Source](http://img.shields.io/badge/source-bramus/router-blue.svg?style=flat-square)](https://github.com/bramus/router) [![Version](https://img.shields.io/packagist/v/bramus/router.svg?style=flat-square)](https://packagist.org/packages/bramus/router) [![Downloads](https://img.shields.io/packagist/dt/bramus/router.svg?style=flat-square)](https://packagist.org/packages/bramus/router/stats) [![License](https://img.shields.io/packagist/l/bramus/router.svg?style=flat-square)](https://github.com/bramus/router/blob/master/LICENSE)
 
 A lightweight and simple object oriented PHP Router.
 Built by Bram(us) Van Damme _([https://www.bram.us](https://www.bram.us))_ and [Contributors](https://github.com/bramus/router/graphs/contributors)
@@ -36,7 +36,7 @@ Built by Bram(us) Van Damme _([https://www.bram.us](https://www.bram.us))_ and [
 Installation is possible using Composer
 
 ```
-composer require bramus/router ~1.4
+composer require bramus/router ~1.6
 ```
 
 
@@ -121,7 +121,7 @@ Usage Examples:
 
 ```php
 // This route handling function will only be executed when visiting http(s)://www.example.org/about
-$router->get('/about', function($name) {
+$router->get('/about', function() {
     echo 'About Page Contents';
 });
 ```
@@ -143,7 +143,7 @@ Commonly used PCRE-based subpatterns within Dynamic Route Patterns are:
 - `.*` = Any character (including `/`), zero or more
 - `[^/]+` = Any character but `/`, one or more
 
-Note: The [PHP PCRE Cheat Sheet](https://www.cs.washington.edu/education/courses/190m/12sp/cheat-sheets/php-regex-cheat-sheet.pdf) might come in handy.
+Note: The [PHP PCRE Cheat Sheet](https://courses.cs.washington.edu/courses/cse154/15sp/cheat-sheets/php-regex-cheat-sheet.pdf) might come in handy.
 
 The __subpatterns__ defined in Dynamic PCRE-based Route Patterns are converted to parameters which are passed into the route handling function. Prerequisite is that these subpatterns need to be defined as __parenthesized subpatterns__, which means that they should be wrapped between parens:
 
@@ -165,7 +165,7 @@ When multiple subpatterns are defined, the resulting __route handling parameters
 
 ```php
 $router->get('/movies/(\d+)/photos/(\d+)', function($movieId, $photoId) {
-    echo 'Movie #' . $movieId . ', photo #' . $photoId);
+    echo 'Movie #' . $movieId . ', photo #' . $photoId;
 });
 ```
 
@@ -182,7 +182,7 @@ Placeholders are easier to use than PRCEs, but offer you less control as they in
 
 ```php
 $router->get('/movies/{movieId}/photos/{photoId}', function($movieId, $photoId) {
-    echo 'Movie #' . $movieId . ', photo #' . $photoId);
+    echo 'Movie #' . $movieId . ', photo #' . $photoId;
 });
 ```
 
@@ -190,7 +190,7 @@ Note: the name of the placeholder does not need to match with the name of the pa
 
 ```php
 $router->get('/movies/{foo}/photos/{bar}', function($movieId, $photoId) {
-    echo 'Movie #' . $movieId . ', photo #' . $photoId);
+    echo 'Movie #' . $movieId . ', photo #' . $photoId;
 });
 ```
 
@@ -268,7 +268,7 @@ $router->get('/(\d+)', '\App\Controllers\User@showProfile');
 
 When a request matches the specified route URI, the `showProfile` method on the `User` class will be executed. The defined route parameters will be passed to the class method.
 
-The method can be static or non-static. In case of a non-static method, a new instance of the class will be created.
+The method can be static (recommended) or non-static (not-recommended). In case of a non-static method, a new instance of the class will be created.
 
 If most/all of your handling classes are in one and the same namespace, you can set the default namespace to use on your router instance via `setNamespace()`
 
@@ -289,6 +289,21 @@ $router->set404(function() {
 });
 ```
 
+You can also define multiple custom routes e.x. you want to define an `/api` route, you can print a custom 404 page:
+
+```php
+$router->set404('/api(/.*)?', function() {
+    header('HTTP/1.1 404 Not Found');
+    header('Content-Type: application/json');
+
+    $jsonArray = array();
+    $jsonArray['status'] = "404";
+    $jsonArray['status_text'] = "route not defined";
+
+    echo json_encode($jsonArray);
+});
+```
+
 Also supported are `Class@Method` callables:
 
 ```php
@@ -296,6 +311,19 @@ $router->set404('\App\Controllers\Error@notFound');
 ```
 
 The 404 handler will be executed when no route pattern was matched to the current URL.
+
+💡 You can also manually trigger the 404 handler by calling `$router->trigger404()`
+
+```php
+$router->get('/([a-z0-9-]+)', function($id) use ($router) {
+    if (!Posts::exists($id)) {
+        $router->trigger404();
+        return;
+    }
+
+    // …
+});
+```
 
 
 ### Before Route Middlewares

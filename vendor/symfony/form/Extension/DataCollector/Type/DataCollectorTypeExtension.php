@@ -12,6 +12,7 @@
 namespace Symfony\Component\Form\Extension\DataCollector\Type;
 
 use Symfony\Component\Form\AbstractTypeExtension;
+use Symfony\Component\Form\Extension\Core\Type\FormType;
 use Symfony\Component\Form\Extension\DataCollector\EventListener\DataCollectorListener;
 use Symfony\Component\Form\Extension\DataCollector\FormDataCollectorInterface;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -24,10 +25,7 @@ use Symfony\Component\Form\FormBuilderInterface;
  */
 class DataCollectorTypeExtension extends AbstractTypeExtension
 {
-    /**
-     * @var DataCollectorListener
-     */
-    private $listener;
+    private DataCollectorListener $listener;
 
     public function __construct(FormDataCollectorInterface $dataCollector)
     {
@@ -35,18 +33,15 @@ class DataCollectorTypeExtension extends AbstractTypeExtension
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
         $builder->addEventSubscriber($this->listener);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getExtendedType()
+    public static function getExtendedTypes(): iterable
     {
-        return 'form';
+        return [FormType::class];
     }
 }

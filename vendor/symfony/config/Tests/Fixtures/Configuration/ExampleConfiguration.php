@@ -13,15 +13,15 @@ namespace Symfony\Component\Config\Tests\Fixtures\Configuration;
 
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
+use Symfony\Component\Config\Tests\Fixtures\TestEnum;
 
 class ExampleConfiguration implements ConfigurationInterface
 {
-    public function getConfigTreeBuilder()
+    public function getConfigTreeBuilder(): TreeBuilder
     {
-        $treeBuilder = new TreeBuilder();
-        $rootNode = $treeBuilder->root('acme_root');
+        $treeBuilder = new TreeBuilder('acme_root');
 
-        $rootNode
+        $treeBuilder->getRootNode()
             ->fixXmlConfig('parameter')
             ->fixXmlConfig('connection')
             ->fixXmlConfig('cms_page')
@@ -35,11 +35,11 @@ class ExampleConfiguration implements ConfigurationInterface
                 ->scalarNode('scalar_array_empty')->defaultValue([])->end()
                 ->scalarNode('scalar_array_defaults')->defaultValue(['elem1', 'elem2'])->end()
                 ->scalarNode('scalar_required')->isRequired()->end()
-                ->scalarNode('scalar_deprecated')->setDeprecated()->end()
-                ->scalarNode('scalar_deprecated_with_message')->setDeprecated('Deprecation custom message for "%node%" at "%path%"')->end()
+                ->scalarNode('scalar_deprecated')->setDeprecated('vendor/package', '1.1')->end()
+                ->scalarNode('scalar_deprecated_with_message')->setDeprecated('vendor/package', '1.1', 'Deprecation custom message for "%node%" at "%path%"')->end()
                 ->scalarNode('node_with_a_looong_name')->end()
                 ->enumNode('enum_with_default')->values(['this', 'that'])->defaultValue('this')->end()
-                ->enumNode('enum')->values(['this', 'that'])->end()
+                ->enumNode('enum')->values(['this', 'that', TestEnum::Ccc])->end()
                 ->arrayNode('array')
                     ->info('some info')
                     ->canBeUnset()
@@ -58,6 +58,9 @@ class ExampleConfiguration implements ConfigurationInterface
                 ->end()
                 ->arrayNode('scalar_prototyped')
                     ->prototype('scalar')->end()
+                ->end()
+                ->variableNode('variable')
+                    ->example(['foo', 'bar'])
                 ->end()
                 ->arrayNode('parameters')
                     ->useAttributeAsKey('name')
@@ -94,6 +97,7 @@ class ExampleConfiguration implements ConfigurationInterface
                         ->end()
                     ->end()
                 ->end()
+                ->append(new CustomNodeDefinition('acme'))
             ->end()
         ;
 

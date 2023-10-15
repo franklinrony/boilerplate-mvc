@@ -2,7 +2,22 @@
 
 ## 1.next – ????.??.??
 
+## 1.6.1 – 2021.11.19
 
+- Fixed: Fix `trigger404()` to work without custom 404 handler _([#169](https://github.com/bramus/router/pull/169))_ _(@mjoris)_
+
+## 1.6 – 2021.07.23
+
+- Added: Ability to set multiple 404s, depending on the route prefix _(@uvulpos)_
+
+## 1.5 – 2020.10.26
+
+- Fixed: Correctly invoke static/non-static class methods _(@bramus)_
+- Fixed: Fix PHP 5.3 support _(@cikal)_
+- Fixed: Fix arguments in demo _(@khromov)_
+- Fixed: Fix #72 _(@acicali)_
+- Added: PHP 7.4 support _(@ShaneMcC)_
+- Added: Ability to externally trigger a 404 _(@PlanetTheCloud)_
 
 ## 1.4.2 – 2019.02.27
 

@@ -12,7 +12,11 @@
 namespace Symfony\Component\Security\Core\Authorization;
 
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Authorization\Strategy\AccessDecisionStrategyInterface;
+use Symfony\Component\Security\Core\Authorization\Strategy\AffirmativeStrategy;
+use Symfony\Component\Security\Core\Authorization\Voter\CacheableVoterInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
+use Symfony\Component\Security\Core\Exception\InvalidArgumentException;
 
 /**
  * AccessDecisionManager is the base class for all access decision managers
@@ -20,202 +24,102 @@ use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class AccessDecisionManager implements AccessDecisionManagerInterface
+final class AccessDecisionManager implements AccessDecisionManagerInterface
 {
-    const STRATEGY_AFFIRMATIVE = 'affirmative';
-    const STRATEGY_CONSENSUS = 'consensus';
-    const STRATEGY_UNANIMOUS = 'unanimous';
+    private const VALID_VOTES = [
+        VoterInterface::ACCESS_GRANTED => true,
+        VoterInterface::ACCESS_DENIED => true,
+        VoterInterface::ACCESS_ABSTAIN => true,
+    ];
 
-    private $voters;
-    private $strategy;
-    private $allowIfAllAbstainDecisions;
-    private $allowIfEqualGrantedDeniedDecisions;
-
-    /**
-     * @param VoterInterface[] $voters                             An array of VoterInterface instances
-     * @param string           $strategy                           The vote strategy
-     * @param bool             $allowIfAllAbstainDecisions         Whether to grant access if all voters abstained or not
-     * @param bool             $allowIfEqualGrantedDeniedDecisions Whether to grant access if result are equals
-     *
-     * @throws \InvalidArgumentException
-     */
-    public function __construct(array $voters = array(), $strategy = self::STRATEGY_AFFIRMATIVE, $allowIfAllAbstainDecisions = false, $allowIfEqualGrantedDeniedDecisions = true)
-    {
-        $strategyMethod = 'decide'.ucfirst($strategy);
-        if (!\is_callable(array($this, $strategyMethod))) {
-            throw new \InvalidArgumentException(sprintf('The strategy "%s" is not supported.', $strategy));
-        }
-
-        $this->voters = $voters;
-        $this->strategy = $strategyMethod;
-        $this->allowIfAllAbstainDecisions = (bool) $allowIfAllAbstainDecisions;
-        $this->allowIfEqualGrantedDeniedDecisions = (bool) $allowIfEqualGrantedDeniedDecisions;
-    }
+    private iterable $voters;
+    private array $votersCacheAttributes = [];
+    private array $votersCacheObject = [];
+    private AccessDecisionStrategyInterface $strategy;
 
     /**
-     * Configures the voters.
-     *
-     * @param VoterInterface[] $voters An array of VoterInterface instances
+     * @param iterable<mixed, VoterInterface> $voters An array or an iterator of VoterInterface instances
      */
-    public function setVoters(array $voters)
+    public function __construct(iterable $voters = [], AccessDecisionStrategyInterface $strategy = null)
     {
         $this->voters = $voters;
+        $this->strategy = $strategy ?? new AffirmativeStrategy();
     }
 
     /**
-     * {@inheritdoc}
+     * @param bool $allowMultipleAttributes Whether to allow passing multiple values to the $attributes array
      */
-    public function decide(TokenInterface $token, array $attributes, $object = null)
+    public function decide(TokenInterface $token, array $attributes, mixed $object = null, bool $allowMultipleAttributes = false): bool
     {
-        return $this->{$this->strategy}($token, $attributes, $object);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function supportsAttribute($attribute)
-    {
-        @trigger_error('The '.__METHOD__.' is deprecated since Symfony 2.8 and will be removed in version 3.0.', E_USER_DEPRECATED);
-
-        foreach ($this->voters as $voter) {
-            if ($voter->supportsAttribute($attribute)) {
-                return true;
-            }
+        // Special case for AccessListener, do not remove the right side of the condition before 6.0
+        if (\count($attributes) > 1 && !$allowMultipleAttributes) {
+            throw new InvalidArgumentException(sprintf('Passing more than one Security attribute to "%s()" is not supported.', __METHOD__));
         }
 
-        return false;
+        return $this->strategy->decide(
+            $this->collectResults($token, $attributes, $object)
+        );
     }
 
     /**
-     * {@inheritdoc}
+     * @return \Traversable<int, int>
      */
-    public function supportsClass($class)
+    private function collectResults(TokenInterface $token, array $attributes, mixed $object): \Traversable
     {
-        @trigger_error('The '.__METHOD__.' is deprecated since Symfony 2.8 and will be removed in version 3.0.', E_USER_DEPRECATED);
-
-        foreach ($this->voters as $voter) {
-            if ($voter->supportsClass($class)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Grants access if any voter returns an affirmative response.
-     *
-     * If all voters abstained from voting, the decision will be based on the
-     * allowIfAllAbstainDecisions property value (defaults to false).
-     */
-    private function decideAffirmative(TokenInterface $token, array $attributes, $object = null)
-    {
-        $deny = 0;
-        foreach ($this->voters as $voter) {
+        foreach ($this->getVoters($attributes, $object) as $voter) {
             $result = $voter->vote($token, $object, $attributes);
-            switch ($result) {
-                case VoterInterface::ACCESS_GRANTED:
-                    return true;
-
-                case VoterInterface::ACCESS_DENIED:
-                    ++$deny;
-
-                    break;
-
-                default:
-                    break;
+            if (!\is_int($result) || !(self::VALID_VOTES[$result] ?? false)) {
+                throw new \LogicException(sprintf('"%s::vote()" must return one of "%s" constants ("ACCESS_GRANTED", "ACCESS_DENIED" or "ACCESS_ABSTAIN"), "%s" returned.', get_debug_type($voter), VoterInterface::class, var_export($result, true)));
             }
-        }
 
-        if ($deny > 0) {
-            return false;
+            yield $result;
         }
-
-        return $this->allowIfAllAbstainDecisions;
     }
 
     /**
-     * Grants access if there is consensus of granted against denied responses.
-     *
-     * Consensus means majority-rule (ignoring abstains) rather than unanimous
-     * agreement (ignoring abstains). If you require unanimity, see
-     * UnanimousBased.
-     *
-     * If there were an equal number of grant and deny votes, the decision will
-     * be based on the allowIfEqualGrantedDeniedDecisions property value
-     * (defaults to true).
-     *
-     * If all voters abstained from voting, the decision will be based on the
-     * allowIfAllAbstainDecisions property value (defaults to false).
+     * @return iterable<mixed, VoterInterface>
      */
-    private function decideConsensus(TokenInterface $token, array $attributes, $object = null)
+    private function getVoters(array $attributes, $object = null): iterable
     {
-        $grant = 0;
-        $deny = 0;
-        foreach ($this->voters as $voter) {
-            $result = $voter->vote($token, $object, $attributes);
-
-            switch ($result) {
-                case VoterInterface::ACCESS_GRANTED:
-                    ++$grant;
-
-                    break;
-
-                case VoterInterface::ACCESS_DENIED:
-                    ++$deny;
-
-                    break;
-            }
-        }
-
-        if ($grant > $deny) {
-            return true;
-        }
-
-        if ($deny > $grant) {
-            return false;
-        }
-
-        if ($grant > 0) {
-            return $this->allowIfEqualGrantedDeniedDecisions;
-        }
-
-        return $this->allowIfAllAbstainDecisions;
-    }
-
-    /**
-     * Grants access if only grant (or abstain) votes were received.
-     *
-     * If all voters abstained from voting, the decision will be based on the
-     * allowIfAllAbstainDecisions property value (defaults to false).
-     */
-    private function decideUnanimous(TokenInterface $token, array $attributes, $object = null)
-    {
-        $grant = 0;
+        $keyAttributes = [];
         foreach ($attributes as $attribute) {
-            foreach ($this->voters as $voter) {
-                $result = $voter->vote($token, $object, array($attribute));
+            $keyAttributes[] = \is_string($attribute) ? $attribute : null;
+        }
+        // use `get_class` to handle anonymous classes
+        $keyObject = \is_object($object) ? $object::class : get_debug_type($object);
+        foreach ($this->voters as $key => $voter) {
+            if (!$voter instanceof CacheableVoterInterface) {
+                yield $voter;
+                continue;
+            }
 
-                switch ($result) {
-                    case VoterInterface::ACCESS_GRANTED:
-                        ++$grant;
-
-                        break;
-
-                    case VoterInterface::ACCESS_DENIED:
-                        return false;
-
-                    default:
-                        break;
+            $supports = true;
+            // The voter supports the attributes if it supports at least one attribute of the list
+            foreach ($keyAttributes as $keyAttribute) {
+                if (null === $keyAttribute) {
+                    $supports = true;
+                } elseif (!isset($this->votersCacheAttributes[$keyAttribute][$key])) {
+                    $this->votersCacheAttributes[$keyAttribute][$key] = $supports = $voter->supportsAttribute($keyAttribute);
+                } else {
+                    $supports = $this->votersCacheAttributes[$keyAttribute][$key];
+                }
+                if ($supports) {
+                    break;
                 }
             }
-        }
+            if (!$supports) {
+                continue;
+            }
 
-        // no deny votes
-        if ($grant > 0) {
-            return true;
+            if (!isset($this->votersCacheObject[$keyObject][$key])) {
+                $this->votersCacheObject[$keyObject][$key] = $supports = $voter->supportsType($keyObject);
+            } else {
+                $supports = $this->votersCacheObject[$keyObject][$key];
+            }
+            if (!$supports) {
+                continue;
+            }
+            yield $voter;
         }
-
-        return $this->allowIfAllAbstainDecisions;
     }
 }

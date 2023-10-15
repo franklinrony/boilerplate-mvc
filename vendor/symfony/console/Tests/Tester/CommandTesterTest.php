@@ -27,7 +27,7 @@ class CommandTesterTest extends TestCase
     protected $command;
     protected $tester;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->command = new Command('foo');
         $this->command->addArgument('command');
@@ -38,7 +38,7 @@ class CommandTesterTest extends TestCase
         $this->tester->execute(['foo' => 'bar'], ['interactive' => false, 'decorated' => false, 'verbosity' => Output::VERBOSITY_VERBOSE]);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->command = null;
         $this->tester = null;
@@ -59,17 +59,37 @@ class CommandTesterTest extends TestCase
     public function testGetOutput()
     {
         rewind($this->tester->getOutput()->getStream());
-        $this->assertEquals('foo'.PHP_EOL, stream_get_contents($this->tester->getOutput()->getStream()), '->getOutput() returns the current output instance');
+        $this->assertEquals('foo'.\PHP_EOL, stream_get_contents($this->tester->getOutput()->getStream()), '->getOutput() returns the current output instance');
     }
 
     public function testGetDisplay()
     {
-        $this->assertEquals('foo'.PHP_EOL, $this->tester->getDisplay(), '->getDisplay() returns the display of the last execution');
+        $this->assertEquals('foo'.\PHP_EOL, $this->tester->getDisplay(), '->getDisplay() returns the display of the last execution');
+    }
+
+    public function testGetDisplayWithoutCallingExecuteBefore()
+    {
+        $tester = new CommandTester(new Command());
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Output not initialized');
+
+        $tester->getDisplay();
     }
 
     public function testGetStatusCode()
     {
-        $this->assertSame(0, $this->tester->getStatusCode(), '->getStatusCode() returns the status code');
+        $this->tester->assertCommandIsSuccessful('->getStatusCode() returns the status code');
+    }
+
+    public function testGetStatusCodeWithoutCallingExecuteBefore()
+    {
+        $tester = new CommandTester(new Command());
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Status code not initialized');
+
+        $tester->getStatusCode();
     }
 
     public function testCommandFromApplication()
@@ -109,7 +129,7 @@ class CommandTesterTest extends TestCase
         $tester->setInputs(['Bobby', 'Fine', 'France']);
         $tester->execute([]);
 
-        $this->assertEquals(0, $tester->getStatusCode());
+        $tester->assertCommandIsSuccessful();
         $this->assertEquals(implode('', $questions), $tester->getDisplay(true));
     }
 
@@ -134,16 +154,14 @@ class CommandTesterTest extends TestCase
         $tester->setInputs(['', '', '']);
         $tester->execute([]);
 
-        $this->assertEquals(0, $tester->getStatusCode());
+        $tester->assertCommandIsSuccessful();
         $this->assertEquals(implode('', $questions), $tester->getDisplay(true));
     }
 
-    /**
-     * @expectedException \RuntimeException
-     * @expectedExceptionMessage Aborted.
-     */
     public function testCommandWithWrongInputsNumber()
     {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Aborted.');
         $questions = [
             'What\'s your name?',
             'How are you?',
@@ -165,12 +183,10 @@ class CommandTesterTest extends TestCase
         $tester->execute([]);
     }
 
-    /**
-     * @expectedException \RuntimeException
-     * @expectedExceptionMessage Aborted.
-     */
     public function testCommandWithQuestionsButNoInputs()
     {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Aborted.');
         $questions = [
             'What\'s your name?',
             'How are you?',
@@ -200,7 +216,7 @@ class CommandTesterTest extends TestCase
         ];
 
         $command = new Command('foo');
-        $command->setCode(function ($input, $output) use ($questions, $command) {
+        $command->setCode(function ($input, $output) use ($questions) {
             $io = new SymfonyStyle($input, $output);
             $io->ask($questions[0]);
             $io->ask($questions[1]);
@@ -211,6 +227,24 @@ class CommandTesterTest extends TestCase
         $tester->setInputs(['Bobby', 'Fine', 'France']);
         $tester->execute([]);
 
-        $this->assertEquals(0, $tester->getStatusCode());
+        $tester->assertCommandIsSuccessful();
+    }
+
+    public function testErrorOutput()
+    {
+        $command = new Command('foo');
+        $command->addArgument('command');
+        $command->addArgument('foo');
+        $command->setCode(function ($input, $output) {
+            $output->getErrorOutput()->write('foo');
+        });
+
+        $tester = new CommandTester($command);
+        $tester->execute(
+            ['foo' => 'bar'],
+            ['capture_stderr_separately' => true]
+        );
+
+        $this->assertSame('foo', $tester->getErrorOutput());
     }
 }

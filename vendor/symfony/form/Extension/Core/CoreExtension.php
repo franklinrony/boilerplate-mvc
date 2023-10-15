@@ -16,8 +16,10 @@ use Symfony\Component\Form\ChoiceList\Factory\CachingFactoryDecorator;
 use Symfony\Component\Form\ChoiceList\Factory\ChoiceListFactoryInterface;
 use Symfony\Component\Form\ChoiceList\Factory\DefaultChoiceListFactory;
 use Symfony\Component\Form\ChoiceList\Factory\PropertyAccessDecorator;
+use Symfony\Component\Form\Extension\Core\Type\TransformationFailureExtension;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Represents the main form extension, which loads the core functionality.
@@ -26,24 +28,27 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
  */
 class CoreExtension extends AbstractExtension
 {
-    private $propertyAccessor;
-    private $choiceListFactory;
+    private PropertyAccessorInterface $propertyAccessor;
+    private ChoiceListFactoryInterface $choiceListFactory;
+    private ?TranslatorInterface $translator;
 
-    public function __construct(PropertyAccessorInterface $propertyAccessor = null, ChoiceListFactoryInterface $choiceListFactory = null)
+    public function __construct(PropertyAccessorInterface $propertyAccessor = null, ChoiceListFactoryInterface $choiceListFactory = null, TranslatorInterface $translator = null)
     {
         $this->propertyAccessor = $propertyAccessor ?: PropertyAccess::createPropertyAccessor();
-        $this->choiceListFactory = $choiceListFactory ?: new CachingFactoryDecorator(new PropertyAccessDecorator(new DefaultChoiceListFactory(), $this->propertyAccessor));
+        $this->choiceListFactory = $choiceListFactory ?? new CachingFactoryDecorator(new PropertyAccessDecorator(new DefaultChoiceListFactory(), $this->propertyAccessor));
+        $this->translator = $translator;
     }
 
-    protected function loadTypes()
+    protected function loadTypes(): array
     {
-        return array(
+        return [
             new Type\FormType($this->propertyAccessor),
             new Type\BirthdayType(),
             new Type\CheckboxType(),
-            new Type\ChoiceType($this->choiceListFactory),
+            new Type\ChoiceType($this->choiceListFactory, $this->translator),
             new Type\CollectionType(),
             new Type\CountryType(),
+            new Type\DateIntervalType(),
             new Type\DateType(),
             new Type\DateTimeType(),
             new Type\EmailType(),
@@ -56,6 +61,7 @@ class CoreExtension extends AbstractExtension
             new Type\PasswordType(),
             new Type\PercentType(),
             new Type\RadioType(),
+            new Type\RangeType(),
             new Type\RepeatedType(),
             new Type\SearchType(),
             new Type\TextareaType(),
@@ -63,11 +69,21 @@ class CoreExtension extends AbstractExtension
             new Type\TimeType(),
             new Type\TimezoneType(),
             new Type\UrlType(),
-            new Type\FileType(),
+            new Type\FileType($this->translator),
             new Type\ButtonType(),
             new Type\SubmitType(),
             new Type\ResetType(),
             new Type\CurrencyType(),
-        );
+            new Type\TelType(),
+            new Type\ColorType($this->translator),
+            new Type\WeekType(),
+        ];
+    }
+
+    protected function loadTypeExtensions(): array
+    {
+        return [
+            new TransformationFailureExtension($this->translator),
+        ];
     }
 }

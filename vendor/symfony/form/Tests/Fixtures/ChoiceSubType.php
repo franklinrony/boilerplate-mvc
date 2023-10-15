@@ -12,6 +12,7 @@
 namespace Symfony\Component\Form\Tests\Fixtures;
 
 use Symfony\Component\Form\AbstractType;
+use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
@@ -19,33 +20,17 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  */
 class ChoiceSubType extends AbstractType
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
-        $resolver->setDefaults(array('expanded' => true));
-        $resolver->setNormalizer('choices', function () {
-            return array(
-                'attr1' => 'Attribute 1',
-                'attr2' => 'Attribute 2',
-            );
-        });
+        $resolver->setDefaults(['expanded' => true]);
+        $resolver->setNormalizer('choices', fn () => [
+            'attr1' => 'Attribute 1',
+            'attr2' => 'Attribute 2',
+        ]);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getParent(): ?string
     {
-        return 'sub_choice';
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getParent()
-    {
-        return 'choice';
+        return ChoiceType::class;
     }
 }

@@ -12,10 +12,28 @@
 namespace Symfony\Component\HttpFoundation\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Bridge\PhpUnit\ExpectDeprecationTrait;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 class IpUtilsTest extends TestCase
 {
+    use ExpectDeprecationTrait;
+
+    public function testSeparateCachesPerProtocol()
+    {
+        $ip = '192.168.52.1';
+        $subnet = '192.168.0.0/16';
+
+        $this->assertFalse(IpUtils::checkIp6($ip, $subnet));
+        $this->assertTrue(IpUtils::checkIp4($ip, $subnet));
+
+        $ip = '2a01:198:603:0:396e:4789:8e99:890f';
+        $subnet = '2a01:198:603:0::/65';
+
+        $this->assertFalse(IpUtils::checkIp4($ip, $subnet));
+        $this->assertTrue(IpUtils::checkIp6($ip, $subnet));
+    }
+
     /**
      * @dataProvider getIpv4Data
      */
@@ -24,7 +42,7 @@ class IpUtilsTest extends TestCase
         $this->assertSame($matches, IpUtils::checkIp($remoteAddr, $cidr));
     }
 
-    public function getIpv4Data()
+    public static function getIpv4Data()
     {
         return [
             [true, '192.168.1.1', '192.168.1.1'],
@@ -39,6 +57,7 @@ class IpUtilsTest extends TestCase
             [true, '1.2.3.4', '192.168.1.0/0'],
             [false, '1.2.3.4', '256.256.256/0'], // invalid CIDR notation
             [false, 'an_invalid_ip', '192.168.1.0/24'],
+            [false, '', '1.2.3.4/1'],
         ];
     }
 
@@ -54,7 +73,7 @@ class IpUtilsTest extends TestCase
         $this->assertSame($matches, IpUtils::checkIp($remoteAddr, $cidr));
     }
 
-    public function getIpv6Data()
+    public static function getIpv6Data()
     {
         return [
             [true, '2a01:198:603:0:396e:4789:8e99:890f', '2a01:198:603:0::/65'],
@@ -69,15 +88,21 @@ class IpUtilsTest extends TestCase
             [false, '2a01:198:603:0:396e:4789:8e99:890f', ['::1', '1a01:198:603:0::/65']],
             [false, '}__test|O:21:&quot;JDatabaseDriverMysqli&quot;:3:{s:2', '::1'],
             [false, '2a01:198:603:0:396e:4789:8e99:890f', 'unknown'],
+            [false, '', '::1'],
+            [false, '127.0.0.1', '::1'],
+            [false, '0.0.0.0/8', '::1'],
+            [false,  '::1', '127.0.0.1'],
+            [false,  '::1', '0.0.0.0/8'],
+            [true, '::ffff:10.126.42.2', '::ffff:10.0.0.0/0'],
         ];
     }
 
     /**
-     * @expectedException \RuntimeException
      * @requires extension sockets
      */
     public function testAnIpv6WithOptionDisabledIpv6()
     {
+        $this->expectException(\RuntimeException::class);
         if (\defined('AF_INET6')) {
             $this->markTestSkipped('Only works when PHP is compiled with the option "disable-ipv6".');
         }
@@ -93,12 +118,105 @@ class IpUtilsTest extends TestCase
         $this->assertFalse(IpUtils::checkIp4($requestIp, $proxyIp));
     }
 
-    public function invalidIpAddressData()
+    public static function invalidIpAddressData()
     {
         return [
             'invalid proxy wildcard' => ['192.168.20.13', '*'],
             'invalid proxy missing netmask' => ['192.168.20.13', '0.0.0.0'],
             'invalid request IP with invalid proxy wildcard' => ['0.0.0.0', '*'],
         ];
+    }
+
+    /**
+     * @dataProvider anonymizedIpData
+     */
+    public function testAnonymize($ip, $expected)
+    {
+        $this->assertSame($expected, IpUtils::anonymize($ip));
+    }
+
+    public static function anonymizedIpData()
+    {
+        return [
+            ['192.168.1.1', '192.168.1.0'],
+            ['1.2.3.4', '1.2.3.0'],
+            ['2a01:198:603:0:396e:4789:8e99:890f', '2a01:198:603::'],
+            ['2a01:198:603:10:396e:4789:8e99:890f', '2a01:198:603:10::'],
+            ['::1', '::'],
+            ['0:0:0:0:0:0:0:1', '::'],
+            ['1:0:0:0:0:0:0:1', '1::'],
+            ['0:0:603:50:396e:4789:8e99:0001', '0:0:603:50::'],
+            ['[0:0:603:50:396e:4789:8e99:0001]', '[0:0:603:50::]'],
+            ['[2a01:198::3]', '[2a01:198::]'],
+            ['::ffff:123.234.235.236', '::ffff:123.234.235.0'], // IPv4-mapped IPv6 addresses
+            ['::123.234.235.236', '::123.234.235.0'], // deprecated IPv4-compatible IPv6 address
+        ];
+    }
+
+    /**
+     * @dataProvider getIp4SubnetMaskZeroData
+     */
+    public function testIp4SubnetMaskZero($matches, $remoteAddr, $cidr)
+    {
+        $this->assertSame($matches, IpUtils::checkIp4($remoteAddr, $cidr));
+    }
+
+    public static function getIp4SubnetMaskZeroData()
+    {
+        return [
+            [true, '1.2.3.4', '0.0.0.0/0'],
+            [true, '1.2.3.4', '192.168.1.0/0'],
+            [false, '1.2.3.4', '256.256.256/0'], // invalid CIDR notation
+        ];
+    }
+
+    /**
+     * @dataProvider getIsPrivateIpData
+     */
+    public function testIsPrivateIp(string $ip, bool $matches)
+    {
+        $this->assertSame($matches, IpUtils::isPrivateIp($ip));
+    }
+
+    public static function getIsPrivateIpData(): array
+    {
+        return [
+            // private
+            ['127.0.0.1',       true],
+            ['10.0.0.1',        true],
+            ['192.168.0.1',     true],
+            ['172.16.0.1',      true],
+            ['169.254.0.1',     true],
+            ['0.0.0.1',         true],
+            ['240.0.0.1',       true],
+            ['::1',             true],
+            ['fc00::1',         true],
+            ['fe80::1',         true],
+            ['::ffff:0:1',      true],
+            ['fd00::1',         true],
+
+            // public
+            ['104.26.14.6',             false],
+            ['2606:4700:20::681a:e06',  false],
+        ];
+    }
+
+    public function testCacheSizeLimit()
+    {
+        $ref = new \ReflectionClass(IpUtils::class);
+
+        /** @var array */
+        $checkedIps = $ref->getStaticPropertyValue('checkedIps');
+        $this->assertIsArray($checkedIps);
+
+        $maxCheckedIps = 1000;
+
+        for ($i = 1; $i < $maxCheckedIps * 1.5; ++$i) {
+            $ip = '192.168.1.'.str_pad((string) $i, 3, '0');
+
+            IpUtils::checkIp4($ip, '127.0.0.1');
+        }
+
+        $this->assertLessThan($maxCheckedIps, \count($checkedIps));
     }
 }

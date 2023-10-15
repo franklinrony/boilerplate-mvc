@@ -12,132 +12,127 @@
 namespace Symfony\Component\Form\Tests\Extension\Core\DataTransformer;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Form\Exception\TransformationFailedException;
 use Symfony\Component\Form\Extension\Core\DataTransformer\ValueToDuplicatesTransformer;
 
 class ValueToDuplicatesTransformerTest extends TestCase
 {
     private $transformer;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->transformer = new ValueToDuplicatesTransformer(array('a', 'b', 'c'));
+        $this->transformer = new ValueToDuplicatesTransformer(['a', 'b', 'c']);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->transformer = null;
     }
 
     public function testTransform()
     {
-        $output = array(
+        $output = [
             'a' => 'Foo',
             'b' => 'Foo',
             'c' => 'Foo',
-        );
+        ];
 
         $this->assertSame($output, $this->transformer->transform('Foo'));
     }
 
     public function testTransformEmpty()
     {
-        $output = array(
+        $output = [
             'a' => null,
             'b' => null,
             'c' => null,
-        );
+        ];
 
         $this->assertSame($output, $this->transformer->transform(null));
     }
 
     public function testReverseTransform()
     {
-        $input = array(
+        $input = [
             'a' => 'Foo',
             'b' => 'Foo',
             'c' => 'Foo',
-        );
+        ];
 
         $this->assertSame('Foo', $this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformCompletelyEmpty()
     {
-        $input = array(
+        $input = [
             'a' => '',
             'b' => '',
             'c' => '',
-        );
+        ];
 
         $this->assertNull($this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformCompletelyNull()
     {
-        $input = array(
+        $input = [
             'a' => null,
             'b' => null,
             'c' => null,
-        );
+        ];
 
         $this->assertNull($this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformEmptyArray()
     {
-        $input = array(
-            'a' => array(),
-            'b' => array(),
-            'c' => array(),
-        );
+        $input = [
+            'a' => [],
+            'b' => [],
+            'c' => [],
+        ];
 
         $this->assertNull($this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformZeroString()
     {
-        $input = array(
+        $input = [
             'a' => '0',
             'b' => '0',
             'c' => '0',
-        );
+        ];
 
         $this->assertSame('0', $this->transformer->reverseTransform($input));
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testReverseTransformPartiallyNull()
     {
-        $input = array(
+        $this->expectException(TransformationFailedException::class);
+        $input = [
             'a' => 'Foo',
             'b' => 'Foo',
             'c' => null,
-        );
+        ];
 
         $this->transformer->reverseTransform($input);
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testReverseTransformDifferences()
     {
-        $input = array(
+        $this->expectException(TransformationFailedException::class);
+        $input = [
             'a' => 'Foo',
             'b' => 'Bar',
             'c' => 'Foo',
-        );
+        ];
 
         $this->transformer->reverseTransform($input);
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testReverseTransformRequiresArray()
     {
+        $this->expectException(TransformationFailedException::class);
         $this->transformer->reverseTransform('12345');
     }
 }

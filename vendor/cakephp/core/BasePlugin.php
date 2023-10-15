@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright 2005-2011, Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -13,78 +15,95 @@
  */
 namespace Cake\Core;
 
+use Cake\Console\CommandCollection;
+use Cake\Http\MiddlewareQueue;
+use Cake\Routing\RouteBuilder;
+use Closure;
 use InvalidArgumentException;
 use ReflectionClass;
 
 /**
  * Base Plugin Class
  *
- * Every plugin should extends from this class or implement the interfaces and
- * include a plugin class in it's src root folder.
+ * Every plugin should extend from this class or implement the interfaces and
+ * include a plugin class in its src root folder.
  */
 class BasePlugin implements PluginInterface
 {
-
     /**
      * Do bootstrapping or not
      *
      * @var bool
      */
-    protected $bootstrapEnabled = true;
-
-    /**
-     * Load routes or not
-     *
-     * @var bool
-     */
-    protected $routesEnabled = true;
-
-    /**
-     * Enable middleware
-     *
-     * @var bool
-     */
-    protected $middlewareEnabled = true;
+    protected bool $bootstrapEnabled = true;
 
     /**
      * Console middleware
      *
      * @var bool
      */
-    protected $consoleEnabled = true;
+    protected bool $consoleEnabled = true;
+
+    /**
+     * Enable middleware
+     *
+     * @var bool
+     */
+    protected bool $middlewareEnabled = true;
+
+    /**
+     * Register container services
+     *
+     * @var bool
+     */
+    protected bool $servicesEnabled = true;
+
+    /**
+     * Load routes or not
+     *
+     * @var bool
+     */
+    protected bool $routesEnabled = true;
 
     /**
      * The path to this plugin.
      *
-     * @var string
+     * @var string|null
      */
-    protected $path;
+    protected ?string $path = null;
 
     /**
      * The class path for this plugin.
      *
-     * @var string
+     * @var string|null
      */
-    protected $classPath;
+    protected ?string $classPath = null;
 
     /**
      * The config path for this plugin.
      *
-     * @var string
+     * @var string|null
      */
-    protected $configPath;
+    protected ?string $configPath = null;
+
+    /**
+     * The templates path for this plugin.
+     *
+     * @var string|null
+     */
+    protected ?string $templatePath = null;
 
     /**
      * The name of this plugin
      *
-     * @var string
+     * @var string|null
      */
-    protected $name;
+    protected ?string $name = null;
 
     /**
      * Constructor
      *
-     * @param array $options Options
+     * @param array<string, mixed> $options Options
      */
     public function __construct(array $options = [])
     {
@@ -93,7 +112,7 @@ class BasePlugin implements PluginInterface
                 $this->{"{$key}Enabled"} = (bool)$options[$key];
             }
         }
-        foreach (['name', 'path', 'classPath', 'configPath'] as $path) {
+        foreach (['name', 'path', 'classPath', 'configPath', 'templatePath'] as $path) {
             if (isset($options[$path])) {
                 $this->{$path} = $options[$path];
             }
@@ -103,21 +122,23 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritdoc}
+     * Initialization hook called from constructor.
+     *
+     * @return void
      */
-    public function initialize()
+    public function initialize(): void
     {
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getName()
+    public function getName(): string
     {
-        if ($this->name) {
+        if ($this->name !== null) {
             return $this->name;
         }
-        $parts = explode('\\', get_class($this));
+        $parts = explode('\\', static::class);
         array_pop($parts);
         $this->name = implode('/', $parts);
 
@@ -125,18 +146,18 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getPath()
+    public function getPath(): string
     {
-        if ($this->path) {
+        if ($this->path !== null) {
             return $this->path;
         }
         $reflection = new ReflectionClass($this);
-        $path = dirname($reflection->getFileName());
+        $path = dirname((string)$reflection->getFileName());
 
         // Trim off src
-        if (substr($path, -3) === 'src') {
+        if (str_ends_with($path, 'src')) {
             $path = substr($path, 0, -3);
         }
         $this->path = rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
@@ -145,11 +166,11 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getConfigPath()
+    public function getConfigPath(): string
     {
-        if ($this->configPath) {
+        if ($this->configPath !== null) {
             return $this->configPath;
         }
         $path = $this->getPath();
@@ -158,11 +179,11 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getClassPath()
+    public function getClassPath(): string
     {
-        if ($this->classPath) {
+        if ($this->classPath !== null) {
             return $this->classPath;
         }
         $path = $this->getPath();
@@ -171,20 +192,33 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function enable($hook)
+    public function getTemplatePath(): string
+    {
+        if ($this->templatePath !== null) {
+            return $this->templatePath;
+        }
+        $path = $this->getPath();
+
+        return $this->templatePath = $path . 'templates' . DIRECTORY_SEPARATOR;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function enable(string $hook)
     {
         $this->checkHook($hook);
-        $this->{"{$hook}Enabled}"} = true;
+        $this->{"{$hook}Enabled"} = true;
 
         return $this;
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function disable($hook)
+    public function disable(string $hook)
     {
         $this->checkHook($hook);
         $this->{"{$hook}Enabled"} = false;
@@ -193,9 +227,9 @@ class BasePlugin implements PluginInterface
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function isEnabled($hook)
+    public function isEnabled(string $hook): bool
     {
         $this->checkHook($hook);
 
@@ -209,50 +243,65 @@ class BasePlugin implements PluginInterface
      * @throws \InvalidArgumentException on invalid hooks
      * @return void
      */
-    protected function checkHook($hook)
+    protected function checkHook(string $hook): void
     {
-        if (!in_array($hook, static::VALID_HOOKS)) {
-            throw new InvalidArgumentException(
-                "`$hook` is not a valid hook name. Must be one of " . implode(', ', static::VALID_HOOKS)
-            );
+        if (!in_array($hook, static::VALID_HOOKS, true)) {
+            throw new InvalidArgumentException(sprintf(
+                '`%s` is not a valid hook name. Must be one of `%s.`',
+                $hook,
+                implode(', ', static::VALID_HOOKS)
+            ));
         }
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function routes($routes)
+    public function routes(RouteBuilder $routes): void
     {
         $path = $this->getConfigPath() . 'routes.php';
-        if (file_exists($path)) {
-            require $path;
+        if (is_file($path)) {
+            $return = require $path;
+            if ($return instanceof Closure) {
+                $return($routes);
+            }
         }
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function bootstrap(PluginApplicationInterface $app)
+    public function bootstrap(PluginApplicationInterface $app): void
     {
         $bootstrap = $this->getConfigPath() . 'bootstrap.php';
-        if (file_exists($bootstrap)) {
+        if (is_file($bootstrap)) {
             require $bootstrap;
         }
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function console($commands)
+    public function console(CommandCollection $commands): CommandCollection
     {
         return $commands->addMany($commands->discoverPlugin($this->getName()));
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function middleware($middleware)
+    public function middleware(MiddlewareQueue $middlewareQueue): MiddlewareQueue
     {
-        return $middleware;
+        return $middlewareQueue;
+    }
+
+    /**
+     * Register container services for this plugin.
+     *
+     * @param \Cake\Core\ContainerInterface $container The container to add services to.
+     * @return void
+     */
+    public function services(ContainerInterface $container): void
+    {
     }
 }

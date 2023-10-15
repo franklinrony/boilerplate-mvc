@@ -81,20 +81,16 @@ class StreamedResponseTest extends TestCase
         $this->assertEquals(1, $called);
     }
 
-    /**
-     * @expectedException \LogicException
-     */
     public function testSendContentWithNonCallable()
     {
+        $this->expectException(\LogicException::class);
         $response = new StreamedResponse(null);
         $response->sendContent();
     }
 
-    /**
-     * @expectedException \LogicException
-     */
     public function testSetContent()
     {
+        $this->expectException(\LogicException::class);
         $response = new StreamedResponse(function () { echo 'foo'; });
         $response->setContent('foo');
     }
@@ -105,40 +101,38 @@ class StreamedResponseTest extends TestCase
         $this->assertFalse($response->getContent());
     }
 
-    public function testCreate()
-    {
-        $response = StreamedResponse::create(function () {}, 204);
-
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\StreamedResponse', $response);
-        $this->assertEquals(204, $response->getStatusCode());
-    }
-
     public function testReturnThis()
     {
         $response = new StreamedResponse(function () {});
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\StreamedResponse', $response->sendContent());
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\StreamedResponse', $response->sendContent());
+        $this->assertInstanceOf(StreamedResponse::class, $response->sendContent());
+        $this->assertInstanceOf(StreamedResponse::class, $response->sendContent());
 
         $response = new StreamedResponse(function () {});
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\StreamedResponse', $response->sendHeaders());
-        $this->assertInstanceOf('Symfony\Component\HttpFoundation\StreamedResponse', $response->sendHeaders());
+        $this->assertInstanceOf(StreamedResponse::class, $response->sendHeaders());
+        $this->assertInstanceOf(StreamedResponse::class, $response->sendHeaders());
     }
 
     public function testSetNotModified()
     {
         $response = new StreamedResponse(function () { echo 'foo'; });
         $modified = $response->setNotModified();
-        $this->assertObjectHasAttribute('headers', $modified);
-        $this->assertObjectHasAttribute('content', $modified);
-        $this->assertObjectHasAttribute('version', $modified);
-        $this->assertObjectHasAttribute('statusCode', $modified);
-        $this->assertObjectHasAttribute('statusText', $modified);
-        $this->assertObjectHasAttribute('charset', $modified);
+        $this->assertSame($response, $modified);
         $this->assertEquals(304, $modified->getStatusCode());
 
         ob_start();
         $modified->sendContent();
         $string = ob_get_clean();
         $this->assertEmpty($string);
+    }
+
+    public function testSendInformationalResponse()
+    {
+        $response = new StreamedResponse();
+        $response->sendHeaders(103);
+
+        // Informational responses must not override the main status code
+        $this->assertSame(200, $response->getStatusCode());
+
+        $response->sendHeaders();
     }
 }

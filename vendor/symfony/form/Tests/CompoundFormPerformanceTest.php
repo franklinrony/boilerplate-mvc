@@ -28,19 +28,19 @@ class CompoundFormPerformanceTest extends FormPerformanceTestCase
         $this->setMaxRunningTime(1);
 
         for ($i = 0; $i < 40; ++$i) {
-            $form = $this->factory->createBuilder('form')
-                ->add('firstName', 'text')
-                ->add('lastName', 'text')
-                ->add('gender', 'choice', array(
-                    'choices' => array('male' => 'Male', 'female' => 'Female'),
+            $form = $this->factory->createBuilder('Symfony\Component\Form\Extension\Core\Type\FormType')
+                ->add('firstName', 'Symfony\Component\Form\Extension\Core\Type\TextType')
+                ->add('lastName', 'Symfony\Component\Form\Extension\Core\Type\TextType')
+                ->add('color', 'Symfony\Component\Form\Extension\Core\Type\ChoiceType', [
+                    'choices' => ['red' => 'Red', 'blue' => 'Blue'],
                     'required' => false,
-                ))
-                ->add('age', 'number')
-                ->add('birthDate', 'birthday')
-                ->add('city', 'choice', array(
+                ])
+                ->add('age', 'Symfony\Component\Form\Extension\Core\Type\NumberType')
+                ->add('birthDate', 'Symfony\Component\Form\Extension\Core\Type\BirthdayType')
+                ->add('city', 'Symfony\Component\Form\Extension\Core\Type\ChoiceType', [
                     // simulate 300 different cities
                     'choices' => range(1, 300),
-                ))
+                ])
                 ->getForm();
 
             // load the form into a view

@@ -12,65 +12,75 @@
 namespace Symfony\Component\Validator\Tests\Mapping;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Validator\Constraints\Collection;
+use Symfony\Component\Validator\Constraints\Composite;
+use Symfony\Component\Validator\Constraints\Required;
 use Symfony\Component\Validator\Constraints\Valid;
+use Symfony\Component\Validator\Exception\ConstraintDefinitionException;
 use Symfony\Component\Validator\Mapping\MemberMetadata;
+use Symfony\Component\Validator\Tests\Fixtures\Annotation\Entity;
 use Symfony\Component\Validator\Tests\Fixtures\ClassConstraint;
 use Symfony\Component\Validator\Tests\Fixtures\ConstraintA;
 use Symfony\Component\Validator\Tests\Fixtures\ConstraintB;
+use Symfony\Component\Validator\Tests\Fixtures\PropertyConstraint;
 
 class MemberMetadataTest extends TestCase
 {
     protected $metadata;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->metadata = new TestMemberMetadata(
-            'Symfony\Component\Validator\Tests\Fixtures\Entity',
+            Entity::class,
             'getLastName',
             'lastName'
         );
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->metadata = null;
     }
 
-    /**
-     * @group legacy
-     */
-    public function testLegacyAddValidSetsMemberToCascaded()
-    {
-        $result = $this->metadata->addConstraint(new Valid());
-
-        $this->assertEquals(array(), $this->metadata->getConstraints());
-        $this->assertEquals($result, $this->metadata);
-        $this->assertTrue($this->metadata->isCascaded());
-    }
-
-    /**
-     * @group legacy
-     */
-    public function testLegacyAddOtherConstraintDoesNotSetMemberToCascaded()
-    {
-        $result = $this->metadata->addConstraint($constraint = new ConstraintA());
-
-        $this->assertEquals(array($constraint), $this->metadata->getConstraints());
-        $this->assertEquals($result, $this->metadata);
-        $this->assertFalse($this->metadata->isCascaded());
-    }
-
     public function testAddConstraintRequiresClassConstraints()
     {
-        $this->{method_exists($this, $_ = 'expectException') ? $_ : 'setExpectedException'}('Symfony\Component\Validator\Exception\ConstraintDefinitionException');
+        $this->expectException(ConstraintDefinitionException::class);
 
         $this->metadata->addConstraint(new ClassConstraint());
     }
 
+    public function testAddCompositeConstraintRejectsNestedClassConstraints()
+    {
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage('The constraint "Symfony\Component\Validator\Tests\Fixtures\ClassConstraint" cannot be put on properties or getters.');
+
+        $this->metadata->addConstraint(new PropertyCompositeConstraint([new ClassConstraint()]));
+    }
+
+    public function testAddCompositeConstraintRejectsDeepNestedClassConstraints()
+    {
+        $this->expectException(ConstraintDefinitionException::class);
+        $this->expectExceptionMessage('The constraint "Symfony\Component\Validator\Tests\Fixtures\ClassConstraint" cannot be put on properties or getters.');
+
+        $this->metadata->addConstraint(new Collection(['field1' => new Required([new ClassConstraint()])]));
+    }
+
+    public function testAddCompositeConstraintAcceptsNestedPropertyConstraints()
+    {
+        $this->metadata->addConstraint($constraint = new PropertyCompositeConstraint([new PropertyConstraint()]));
+        $this->assertSame($this->metadata->getConstraints(), [$constraint]);
+    }
+
+    public function testAddCompositeConstraintAcceptsDeepNestedPropertyConstraints()
+    {
+        $this->metadata->addConstraint($constraint = new Collection(['field1' => new Required([new PropertyConstraint()])]));
+        $this->assertSame($this->metadata->getConstraints(), [$constraint]);
+    }
+
     public function testSerialize()
     {
-        $this->metadata->addConstraint(new ConstraintA(array('property1' => 'A')));
-        $this->metadata->addConstraint(new ConstraintB(array('groups' => 'TestGroup')));
+        $this->metadata->addConstraint(new ConstraintA(['property1' => 'A']));
+        $this->metadata->addConstraint(new ConstraintB(['groups' => 'TestGroup']));
 
         $metadata = unserialize(serialize($this->metadata));
 
@@ -79,19 +89,7 @@ class MemberMetadataTest extends TestCase
 
     public function testSerializeCollectionCascaded()
     {
-        $this->metadata->addConstraint(new Valid(array('traverse' => true)));
-
-        $metadata = unserialize(serialize($this->metadata));
-
-        $this->assertEquals($this->metadata, $metadata);
-    }
-
-    /**
-     * @group legacy
-     */
-    public function testLegacySerializeCollectionCascadedDeeply()
-    {
-        $this->metadata->addConstraint(new Valid(array('traverse' => true)));
+        $this->metadata->addConstraint(new Valid(['traverse' => true]));
 
         $metadata = unserialize(serialize($this->metadata));
 
@@ -100,7 +98,7 @@ class MemberMetadataTest extends TestCase
 
     public function testSerializeCollectionNotCascaded()
     {
-        $this->metadata->addConstraint(new Valid(array('traverse' => false)));
+        $this->metadata->addConstraint(new Valid(['traverse' => false]));
 
         $metadata = unserialize(serialize($this->metadata));
 
@@ -110,11 +108,26 @@ class MemberMetadataTest extends TestCase
 
 class TestMemberMetadata extends MemberMetadata
 {
-    public function getPropertyValue($object)
+    public function getPropertyValue($object): mixed
     {
     }
 
-    protected function newReflectionMember($object)
+    protected function newReflectionMember($object): \ReflectionMethod
     {
+    }
+}
+
+class PropertyCompositeConstraint extends Composite
+{
+    public $nested;
+
+    public function getDefaultOption(): ?string
+    {
+        return $this->getCompositeOption();
+    }
+
+    protected function getCompositeOption(): string
+    {
+        return 'nested';
     }
 }

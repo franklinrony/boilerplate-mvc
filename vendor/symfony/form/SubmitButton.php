@@ -18,15 +18,9 @@ namespace Symfony\Component\Form;
  */
 class SubmitButton extends Button implements ClickableInterface
 {
-    /**
-     * @var bool
-     */
-    private $clicked = false;
+    private bool $clicked = false;
 
-    /**
-     * {@inheritdoc}
-     */
-    public function isClicked()
+    public function isClicked(): bool
     {
         return $this->clicked;
     }
@@ -34,14 +28,11 @@ class SubmitButton extends Button implements ClickableInterface
     /**
      * Submits data to the button.
      *
-     * @param null|string $submittedData The data
-     * @param bool        $clearMissing  Not used
-     *
      * @return $this
      *
      * @throws Exception\AlreadySubmittedException if the form has already been submitted
      */
-    public function submit($submittedData, $clearMissing = true)
+    public function submit(array|string|null $submittedData, bool $clearMissing = true): static
     {
         if ($this->getConfig()->getDisabled()) {
             $this->clicked = false;

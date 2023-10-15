@@ -12,10 +12,10 @@
 namespace Symfony\Component\Security\Core\Authorization\Voter;
 
 use Symfony\Component\ExpressionLanguage\Expression;
-use Symfony\Component\ExpressionLanguage\ExpressionFunctionProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolverInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Authorization\ExpressionLanguage;
 use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
 
@@ -24,55 +24,41 @@ use Symfony\Component\Security\Core\Role\RoleHierarchyInterface;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class ExpressionVoter implements VoterInterface
+class ExpressionVoter implements CacheableVoterInterface
 {
-    private $expressionLanguage;
-    private $trustResolver;
-    private $roleHierarchy;
+    private ExpressionLanguage $expressionLanguage;
+    private AuthenticationTrustResolverInterface $trustResolver;
+    private AuthorizationCheckerInterface $authChecker;
+    private ?RoleHierarchyInterface $roleHierarchy;
 
-    public function __construct(ExpressionLanguage $expressionLanguage, AuthenticationTrustResolverInterface $trustResolver, RoleHierarchyInterface $roleHierarchy = null)
+    public function __construct(ExpressionLanguage $expressionLanguage, AuthenticationTrustResolverInterface $trustResolver, AuthorizationCheckerInterface $authChecker, RoleHierarchyInterface $roleHierarchy = null)
     {
         $this->expressionLanguage = $expressionLanguage;
         $this->trustResolver = $trustResolver;
+        $this->authChecker = $authChecker;
         $this->roleHierarchy = $roleHierarchy;
     }
 
-    public function addExpressionLanguageProvider(ExpressionFunctionProviderInterface $provider)
+    public function supportsAttribute(string $attribute): bool
     {
-        $this->expressionLanguage->registerProvider($provider);
+        return false;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function supportsAttribute($attribute)
-    {
-        return $attribute instanceof Expression;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function supportsClass($class)
+    public function supportsType(string $subjectType): bool
     {
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function vote(TokenInterface $token, $object, array $attributes)
+    public function vote(TokenInterface $token, mixed $subject, array $attributes): int
     {
         $result = VoterInterface::ACCESS_ABSTAIN;
         $variables = null;
         foreach ($attributes as $attribute) {
-            if (!$this->supportsAttribute($attribute)) {
+            if (!$attribute instanceof Expression) {
                 continue;
             }
 
-            if (null === $variables) {
-                $variables = $this->getVariables($token, $object);
-            }
+            $variables ??= $this->getVariables($token, $subject);
 
             $result = VoterInterface::ACCESS_DENIED;
             if ($this->expressionLanguage->evaluate($attribute, $variables)) {
@@ -83,28 +69,29 @@ class ExpressionVoter implements VoterInterface
         return $result;
     }
 
-    private function getVariables(TokenInterface $token, $object)
+    private function getVariables(TokenInterface $token, mixed $subject): array
     {
+        $roleNames = $token->getRoleNames();
+
         if (null !== $this->roleHierarchy) {
-            $roles = $this->roleHierarchy->getReachableRoles($token->getRoles());
-        } else {
-            $roles = $token->getRoles();
+            $roleNames = $this->roleHierarchy->getReachableRoleNames($roleNames);
         }
 
-        $variables = array(
+        $variables = [
             'token' => $token,
             'user' => $token->getUser(),
-            'object' => $object,
-            'subject' => $object,
-            'roles' => array_map(function ($role) { return $role->getRole(); }, $roles),
+            'object' => $subject,
+            'subject' => $subject,
+            'role_names' => $roleNames,
             'trust_resolver' => $this->trustResolver,
-        );
+            'auth_checker' => $this->authChecker,
+        ];
 
         // this is mainly to propose a better experience when the expression is used
         // in an access control rule, as the developer does not know that it's going
         // to be handled by this voter
-        if ($object instanceof Request) {
-            $variables['request'] = $object;
+        if ($subject instanceof Request) {
+            $variables['request'] = $subject;
         }
 
         return $variables;

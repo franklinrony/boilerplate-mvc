@@ -1,14 +1,11 @@
 ``dump``
 ========
 
-.. versionadded:: 1.5
-    The ``dump`` function was added in Twig 1.5.
-
 The ``dump`` function dumps information about a template variable. This is
 mostly useful to debug a template that does not behave as expected by
 introspecting its variables:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {{ dump(user) }}
 
@@ -31,7 +28,7 @@ introspecting its variables:
 In an HTML context, wrap the output with a ``pre`` tag to make it easier to
 read:
 
-.. code-block:: jinja
+.. code-block:: html+twig
 
     <pre>
         {{ dump(user) }}
@@ -45,14 +42,14 @@ read:
 
 You can debug several variables by passing them as additional arguments:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {{ dump(user, categories) }}
 
 If you don't pass any value, all variables from the current context are
 dumped:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {{ dump() }}
 
@@ -66,4 +63,4 @@ Arguments
 * ``context``: The context to dump
 
 .. _`XDebug`:   https://xdebug.org/docs/display
-.. _`var_dump`: https://secure.php.net/var_dump
+.. _`var_dump`: https://www.php.net/var_dump

@@ -11,22 +11,14 @@
 
 namespace Symfony\Component\Validator\Tests\Constraints;
 
-use Symfony\Bridge\PhpUnit\DnsMock;
 use Symfony\Component\Validator\Constraints\Url;
 use Symfony\Component\Validator\Constraints\UrlValidator;
-use Symfony\Component\Validator\Validation;
+use Symfony\Component\Validator\Exception\UnexpectedValueException;
+use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
-/**
- * @group dns-sensitive
- */
-class UrlValidatorTest extends AbstractConstraintValidatorTest
+class UrlValidatorTest extends ConstraintValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): UrlValidator
     {
         return new UrlValidator();
     }
@@ -52,11 +44,9 @@ class UrlValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    /**
-     * @expectedException \Symfony\Component\Validator\Exception\UnexpectedTypeException
-     */
     public function testExpectsStringCompatibleType()
     {
+        $this->expectException(UnexpectedValueException::class);
         $this->validator->validate(new \stdClass(), new Url());
     }
 
@@ -70,69 +60,133 @@ class UrlValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    public function getValidUrls()
+    /**
+     * @dataProvider getValidUrlsWithWhitespaces
+     */
+    public function testValidUrlsWithWhitespaces($url)
     {
-        return array(
-            array('http://a.pl'),
-            array('http://www.google.com'),
-            array('http://www.google.com.'),
-            array('http://www.google.museum'),
-            array('https://google.com/'),
-            array('https://google.com:80/'),
-            array('http://www.example.coop/'),
-            array('http://www.test-example.com/'),
-            array('http://www.symfony.com/'),
-            array('http://symfony.fake/blog/'),
-            array('http://symfony.com/?'),
-            array('http://symfony.com/search?type=&q=url+validator'),
-            array('http://symfony.com/#'),
-            array('http://symfony.com/#?'),
-            array('http://www.symfony.com/doc/current/book/validation.html#supported-constraints'),
-            array('http://very.long.domain.name.com/'),
-            array('http://localhost/'),
-            array('http://myhost123/'),
-            array('http://127.0.0.1/'),
-            array('http://127.0.0.1:80/'),
-            array('http://[::1]/'),
-            array('http://[::1]:80/'),
-            array('http://[1:2:3::4:5:6:7]/'),
-            array('http://sãopaulo.com/'),
-            array('http://xn--sopaulo-xwa.com/'),
-            array('http://sãopaulo.com.br/'),
-            array('http://xn--sopaulo-xwa.com.br/'),
-            array('http://пример.испытание/'),
-            array('http://xn--e1afmkfd.xn--80akhbyknj4f/'),
-            array('http://مثال.إختبار/'),
-            array('http://xn--mgbh0fb.xn--kgbechtv/'),
-            array('http://例子.测试/'),
-            array('http://xn--fsqu00a.xn--0zwm56d/'),
-            array('http://例子.測試/'),
-            array('http://xn--fsqu00a.xn--g6w251d/'),
-            array('http://例え.テスト/'),
-            array('http://xn--r8jz45g.xn--zckzah/'),
-            array('http://مثال.آزمایشی/'),
-            array('http://xn--mgbh0fb.xn--hgbk6aj7f53bba/'),
-            array('http://실례.테스트/'),
-            array('http://xn--9n2bp8q.xn--9t4b11yi5a/'),
-            array('http://العربية.idn.icann.org/'),
-            array('http://xn--ogb.idn.icann.org/'),
-            array('http://xn--e1afmkfd.xn--80akhbyknj4f.xn--e1afmkfd/'),
-            array('http://xn--espaa-rta.xn--ca-ol-fsay5a/'),
-            array('http://xn--d1abbgf6aiiy.xn--p1ai/'),
-            array('http://☎.com/'),
-            array('http://username:password@symfony.com'),
-            array('http://user.name:password@symfony.com'),
-            array('http://username:pass.word@symfony.com'),
-            array('http://user.name:pass.word@symfony.com'),
-            array('http://user-name@symfony.com'),
-            array('http://symfony.com?'),
-            array('http://symfony.com?query=1'),
-            array('http://symfony.com/?query=1'),
-            array('http://symfony.com#'),
-            array('http://symfony.com#fragment'),
-            array('http://symfony.com/#fragment'),
-            array('http://symfony.com/#one_more%20test'),
-        );
+        $this->validator->validate($url, new Url(['normalizer' => 'trim']));
+
+        $this->assertNoViolation();
+    }
+
+    /**
+     * @dataProvider getValidRelativeUrls
+     * @dataProvider getValidUrls
+     */
+    public function testValidRelativeUrl($url)
+    {
+        $constraint = new Url([
+            'relativeProtocol' => true,
+        ]);
+
+        $this->validator->validate($url, $constraint);
+
+        $this->assertNoViolation();
+    }
+
+    public static function getValidRelativeUrls()
+    {
+        return [
+            ['//example.com'],
+            ['//examp_le.com'],
+            ['//symfony.fake/blog/'],
+            ['//symfony.com/search?type=&q=url+validator'],
+        ];
+    }
+
+    public static function getValidUrls()
+    {
+        return [
+            ['http://a.pl'],
+            ['http://www.example.com'],
+            ['http://tt.example.com'],
+            ['http://m.example.com'],
+            ['http://m.m.m.example.com'],
+            ['http://example.m.example.com'],
+            ['https://long-string_with+symbols.m.example.com'],
+            ['http://www.example.com.'],
+            ['http://www.example.museum'],
+            ['https://example.com/'],
+            ['https://example.com:80/'],
+            ['http://examp_le.com'],
+            ['http://www.sub_domain.examp_le.com'],
+            ['http://www.example.coop/'],
+            ['http://www.test-example.com/'],
+            ['http://www.symfony.com/'],
+            ['http://symfony.fake/blog/'],
+            ['http://symfony.com/?'],
+            ['http://symfony.com/search?type=&q=url+validator'],
+            ['http://symfony.com/#'],
+            ['http://symfony.com/#?'],
+            ['http://www.symfony.com/doc/current/book/validation.html#supported-constraints'],
+            ['http://very.long.domain.name.com/'],
+            ['http://localhost/'],
+            ['http://myhost123/'],
+            ['http://internal-api'],
+            ['http://internal-api.'],
+            ['http://internal-api/'],
+            ['http://internal-api/path'],
+            ['http://127.0.0.1/'],
+            ['http://127.0.0.1:80/'],
+            ['http://[::1]/'],
+            ['http://[::1]:80/'],
+            ['http://[1:2:3::4:5:6:7]/'],
+            ['http://sãopaulo.com/'],
+            ['http://xn--sopaulo-xwa.com/'],
+            ['http://sãopaulo.com.br/'],
+            ['http://xn--sopaulo-xwa.com.br/'],
+            ['http://пример.испытание/'],
+            ['http://xn--e1afmkfd.xn--80akhbyknj4f/'],
+            ['http://مثال.إختبار/'],
+            ['http://xn--mgbh0fb.xn--kgbechtv/'],
+            ['http://例子.测试/'],
+            ['http://xn--fsqu00a.xn--0zwm56d/'],
+            ['http://例子.測試/'],
+            ['http://xn--fsqu00a.xn--g6w251d/'],
+            ['http://例え.テスト/'],
+            ['http://xn--r8jz45g.xn--zckzah/'],
+            ['http://مثال.آزمایشی/'],
+            ['http://xn--mgbh0fb.xn--hgbk6aj7f53bba/'],
+            ['http://실례.테스트/'],
+            ['http://xn--9n2bp8q.xn--9t4b11yi5a/'],
+            ['http://العربية.idn.icann.org/'],
+            ['http://xn--ogb.idn.icann.org/'],
+            ['http://xn--e1afmkfd.xn--80akhbyknj4f.xn--e1afmkfd/'],
+            ['http://xn--espaa-rta.xn--ca-ol-fsay5a/'],
+            ['http://xn--d1abbgf6aiiy.xn--p1ai/'],
+            ['http://☎.com/'],
+            ['http://username:password@symfony.com'],
+            ['http://user.name:password@symfony.com'],
+            ['http://user_name:pass_word@symfony.com'],
+            ['http://username:pass.word@symfony.com'],
+            ['http://user.name:pass.word@symfony.com'],
+            ['http://user-name@symfony.com'],
+            ['http://user_name@symfony.com'],
+            ['http://u%24er:password@symfony.com'],
+            ['http://user:pa%24%24word@symfony.com'],
+            ['http://symfony.com?'],
+            ['http://symfony.com?query=1'],
+            ['http://symfony.com/?query=1'],
+            ['http://symfony.com#'],
+            ['http://symfony.com#fragment'],
+            ['http://symfony.com/#fragment'],
+            ['http://symfony.com/#one_more%20test'],
+            ['http://example.com/exploit.html?hello[0]=test'],
+            ['http://বিডিআইএ.বাংলা'],
+        ];
+    }
+
+    public static function getValidUrlsWithWhitespaces()
+    {
+        return [
+            ["\x20http://www.example.com"],
+            ["\x09\x09http://www.example.com."],
+            ["http://symfony.fake/blog/\x0A"],
+            ["http://symfony.com/search?type=&q=url+validator\x0D\x0D"],
+            ["\x00https://example.com:80\x00"],
+            ["\x0B\x0Bhttp://username:password@symfony.com\x0B\x0B"],
+        ];
     }
 
     /**
@@ -140,42 +194,99 @@ class UrlValidatorTest extends AbstractConstraintValidatorTest
      */
     public function testInvalidUrls($url)
     {
-        $constraint = new Url(array(
+        $constraint = new Url([
             'message' => 'myMessage',
-        ));
+        ]);
 
         $this->validator->validate($url, $constraint);
 
         $this->buildViolation('myMessage')
             ->setParameter('{{ value }}', '"'.$url.'"')
+            ->setCode(Url::INVALID_URL_ERROR)
             ->assertRaised();
     }
 
-    public function getInvalidUrls()
+    /**
+     * @dataProvider getInvalidRelativeUrls
+     * @dataProvider getInvalidUrls
+     */
+    public function testInvalidRelativeUrl($url)
     {
-        return array(
-            array('google.com'),
-            array('://google.com'),
-            array('http ://google.com'),
-            array('http:/google.com'),
-            array('http://goog_le.com'),
-            array('http://google.com::aa'),
-            array('http://google.com:aa'),
-            array('ftp://google.fr'),
-            array('faked://google.fr'),
-            array('http://127.0.0.1:aa/'),
-            array('ftp://[::1]/'),
-            array('http://[::1'),
-            array('http://hello.☎/'),
-            array('http://:password@symfony.com'),
-            array('http://:password@@symfony.com'),
-            array('http://username:passwordsymfony.com'),
-            array('http://usern@me:password@symfony.com'),
-            array('http://example.com/exploit.html?<script>alert(1);</script>'),
-            array('http://example.com/exploit.html?hel lo'),
-            array('http://example.com/exploit.html?not_a%hex'),
-            array('http://'),
-        );
+        $constraint = new Url([
+            'message' => 'myMessage',
+            'relativeProtocol' => true,
+        ]);
+
+        $this->validator->validate($url, $constraint);
+
+        $this->buildViolation('myMessage')
+            ->setParameter('{{ value }}', '"'.$url.'"')
+            ->setCode(Url::INVALID_URL_ERROR)
+            ->assertRaised();
+    }
+
+    public static function getInvalidRelativeUrls()
+    {
+        return [
+            ['/example.com'],
+            ['//example.com::aa'],
+            ['//example.com:aa'],
+            ['//127.0.0.1:aa/'],
+            ['//[::1'],
+            ['//hello.☎/'],
+            ['//:password@symfony.com'],
+            ['//:password@@symfony.com'],
+            ['//username:passwordsymfony.com'],
+            ['//usern@me:password@symfony.com'],
+            ['//example.com/exploit.html?<script>alert(1);</script>'],
+            ['//example.com/exploit.html?hel lo'],
+            ['//example.com/exploit.html?not_a%hex'],
+            ['//'],
+        ];
+    }
+
+    public static function getInvalidUrls()
+    {
+        return [
+            ['example.com'],
+            ['://example.com'],
+            ['http ://example.com'],
+            ['http:/example.com'],
+            ['http://example.com::aa'],
+            ['http://example.com:aa'],
+            ['ftp://example.fr'],
+            ['faked://example.fr'],
+            ['http://127.0.0.1:aa/'],
+            ['ftp://[::1]/'],
+            ['http://[::1'],
+            ['http://☎'],
+            ['http://☎.'],
+            ['http://☎/'],
+            ['http://☎/path'],
+            ['http://hello.☎'],
+            ['http://hello.☎.'],
+            ['http://hello.☎/'],
+            ['http://hello.☎/path'],
+            ['http://:password@symfony.com'],
+            ['http://:password@@symfony.com'],
+            ['http://username:passwordsymfony.com'],
+            ['http://usern@me:password@symfony.com'],
+            ['http://nota%hex:password@symfony.com'],
+            ['http://username:nota%hex@symfony.com'],
+            ['http://example.com/exploit.html?<script>alert(1);</script>'],
+            ['http://example.com/exploit.html?hel lo'],
+            ['http://example.com/exploit.html?not_a%hex'],
+            ['http://'],
+            ['http://www..com'],
+            ['http://www..example.com'],
+            ['http://www..m.example.com'],
+            ['http://.m.example.com'],
+            ['http://wwww.example..com'],
+            ['http://.www.example.com'],
+            ['http://example.co-'],
+            ['http://example.co-/path'],
+            ['http:///path'],
+        ];
     }
 
     /**
@@ -183,57 +294,28 @@ class UrlValidatorTest extends AbstractConstraintValidatorTest
      */
     public function testCustomProtocolIsValid($url)
     {
-        $constraint = new Url(array(
-            'protocols' => array('ftp', 'file', 'git'),
-        ));
+        $constraint = new Url([
+            'protocols' => ['ftp', 'file', 'git'],
+        ]);
 
         $this->validator->validate($url, $constraint);
 
         $this->assertNoViolation();
     }
 
-    public function getValidCustomUrls()
+    public static function getValidCustomUrls()
     {
-        return array(
-            array('ftp://google.com'),
-            array('file://127.0.0.1'),
-            array('git://[::1]/'),
-        );
-    }
-
-    /**
-     * @dataProvider getCheckDns
-     * @requires function Symfony\Bridge\PhpUnit\DnsMock::withMockedHosts
-     */
-    public function testCheckDns($violation)
-    {
-        DnsMock::withMockedHosts(array('example.com' => array(array('type' => $violation ? '' : 'A'))));
-
-        $constraint = new Url(array(
-            'checkDNS' => true,
-            'dnsMessage' => 'myMessage',
-        ));
-
-        $this->validator->validate('http://example.com', $constraint);
-
-        if (!$violation) {
-            $this->assertNoViolation();
-        } else {
-            $this->buildViolation('myMessage')
-                ->setParameter('{{ value }}', '"example.com"')
-                ->assertRaised();
-        }
-    }
-
-    public function getCheckDns()
-    {
-        return array(array(true), array(false));
+        return [
+            ['ftp://example.com'],
+            ['file://127.0.0.1'],
+            ['git://[::1]/'],
+        ];
     }
 }
 
 class EmailProvider
 {
-    public function __toString()
+    public function __toString(): string
     {
         return '';
     }

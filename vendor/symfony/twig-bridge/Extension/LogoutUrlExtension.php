@@ -20,34 +20,29 @@ use Twig\TwigFunction;
  *
  * @author Jeremy Mikola <jmikola@gmail.com>
  */
-class LogoutUrlExtension extends AbstractExtension
+final class LogoutUrlExtension extends AbstractExtension
 {
-    private $generator;
+    private LogoutUrlGenerator $generator;
 
     public function __construct(LogoutUrlGenerator $generator)
     {
         $this->generator = $generator;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getFunctions()
+    public function getFunctions(): array
     {
-        return array(
-            new TwigFunction('logout_url', array($this, 'getLogoutUrl')),
-            new TwigFunction('logout_path', array($this, 'getLogoutPath')),
-        );
+        return [
+            new TwigFunction('logout_url', $this->getLogoutUrl(...)),
+            new TwigFunction('logout_path', $this->getLogoutPath(...)),
+        ];
     }
 
     /**
      * Generates the relative logout URL for the firewall.
      *
      * @param string|null $key The firewall key or null to use the current firewall key
-     *
-     * @return string The relative logout URL
      */
-    public function getLogoutPath($key = null)
+    public function getLogoutPath(string $key = null): string
     {
         return $this->generator->getLogoutPath($key);
     }
@@ -56,19 +51,9 @@ class LogoutUrlExtension extends AbstractExtension
      * Generates the absolute logout URL for the firewall.
      *
      * @param string|null $key The firewall key or null to use the current firewall key
-     *
-     * @return string The absolute logout URL
      */
-    public function getLogoutUrl($key = null)
+    public function getLogoutUrl(string $key = null): string
     {
         return $this->generator->getLogoutUrl($key);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
-    {
-        return 'logout_url';
     }
 }

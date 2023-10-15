@@ -11,37 +11,34 @@
 
 namespace Symfony\Component\Form\Extension\Validator\Type;
 
-use Symfony\Component\Form\FormBuilderInterface;
-use Symfony\Component\Form\Extension\Validator\ViolationMapper\ViolationMapper;
+use Symfony\Component\Form\Extension\Core\Type\FormType;
 use Symfony\Component\Form\Extension\Validator\EventListener\ValidationListener;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-use Symfony\Component\Validator\ValidatorInterface as LegacyValidatorInterface;
+use Symfony\Component\Form\Extension\Validator\ViolationMapper\ViolationMapper;
+use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\Form\FormRendererInterface;
 use Symfony\Component\OptionsResolver\Options;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Validator\Constraint;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class FormTypeValidatorExtension extends BaseValidatorExtension
 {
-    private $validator;
-    private $violationMapper;
+    private ValidatorInterface $validator;
+    private ViolationMapper $violationMapper;
+    private bool $legacyErrorMessages;
 
-    /**
-     * @param ValidatorInterface|LegacyValidatorInterface $validator
-     */
-    public function __construct($validator)
+    public function __construct(ValidatorInterface $validator, bool $legacyErrorMessages = true, FormRendererInterface $formRenderer = null, TranslatorInterface $translator = null)
     {
-        if (!$validator instanceof ValidatorInterface && !$validator instanceof LegacyValidatorInterface) {
-            throw new \InvalidArgumentException('Validator must be instance of Symfony\Component\Validator\Validator\ValidatorInterface or Symfony\Component\Validator\ValidatorInterface');
-        }
-
         $this->validator = $validator;
-        $this->violationMapper = new ViolationMapper();
+        $this->violationMapper = new ViolationMapper($formRenderer, $translator);
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
@@ -49,35 +46,29 @@ class FormTypeValidatorExtension extends BaseValidatorExtension
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function configureOptions(OptionsResolver $resolver)
     {
         parent::configureOptions($resolver);
 
         // Constraint should always be converted to an array
-        $constraintsNormalizer = function (Options $options, $constraints) {
-            return is_object($constraints) ? array($constraints) : (array) $constraints;
-        };
+        $constraintsNormalizer = static fn (Options $options, $constraints) => \is_object($constraints) ? [$constraints] : (array) $constraints;
 
-        $resolver->setDefaults(array(
-            'error_mapping' => array(),
-            'constraints' => array(),
-            'cascade_validation' => false,
+        $resolver->setDefaults([
+            'error_mapping' => [],
+            'constraints' => [],
             'invalid_message' => 'This value is not valid.',
-            'invalid_message_parameters' => array(),
+            'invalid_message_parameters' => [],
             'allow_extra_fields' => false,
             'extra_fields_message' => 'This form should not contain extra fields.',
-        ));
-
+        ]);
+        $resolver->setAllowedTypes('constraints', [Constraint::class, Constraint::class.'[]']);
         $resolver->setNormalizer('constraints', $constraintsNormalizer);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getExtendedType()
+    public static function getExtendedTypes(): iterable
     {
-        return 'form';
+        return [FormType::class];
     }
 }

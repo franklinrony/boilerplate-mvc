@@ -12,56 +12,75 @@
 namespace Symfony\Component\Security\Core\Tests\Authorization\Voter;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Security\Core\Authentication\AuthenticationTrustResolver;
+use Symfony\Component\Security\Core\Authentication\Token\AbstractToken;
+use Symfony\Component\Security\Core\Authorization\Voter\AuthenticatedVoter;
 use Symfony\Component\Security\Core\Authorization\Voter\RoleVoter;
 use Symfony\Component\Security\Core\Authorization\Voter\VoterInterface;
-use Symfony\Component\Security\Core\Role\Role;
 
 class RoleVoterTest extends TestCase
 {
-    public function testSupportsClass()
-    {
-        $voter = new RoleVoter();
-
-        $this->assertTrue($voter->supportsClass('Foo'));
-    }
-
     /**
      * @dataProvider getVoteTests
      */
-    public function testVote($roles, $attributes, $expected)
+    public function testVoteUsingTokenThatReturnsRoleNames($roles, $attributes, $expected)
     {
         $voter = new RoleVoter();
 
-        $this->assertSame($expected, $voter->vote($this->getToken($roles), null, $attributes));
+        $this->assertSame($expected, $voter->vote($this->getTokenWithRoleNames($roles), null, $attributes));
     }
 
-    public function getVoteTests()
+    public static function getVoteTests()
     {
-        return array(
-            array(array(), array(), VoterInterface::ACCESS_ABSTAIN),
-            array(array(), array('FOO'), VoterInterface::ACCESS_ABSTAIN),
-            array(array(), array('ROLE_FOO'), VoterInterface::ACCESS_DENIED),
-            array(array('ROLE_FOO'), array('ROLE_FOO'), VoterInterface::ACCESS_GRANTED),
-            array(array('ROLE_FOO'), array('FOO', 'ROLE_FOO'), VoterInterface::ACCESS_GRANTED),
-            array(array('ROLE_BAR', 'ROLE_FOO'), array('ROLE_FOO'), VoterInterface::ACCESS_GRANTED),
+        return [
+            [[], [], VoterInterface::ACCESS_ABSTAIN],
+            [[], ['FOO'], VoterInterface::ACCESS_ABSTAIN],
+            [[], ['ROLE_FOO'], VoterInterface::ACCESS_DENIED],
+            [['ROLE_FOO'], ['ROLE_FOO'], VoterInterface::ACCESS_GRANTED],
+            [['ROLE_FOO'], ['FOO', 'ROLE_FOO'], VoterInterface::ACCESS_GRANTED],
+            [['ROLE_BAR', 'ROLE_FOO'], ['ROLE_FOO'], VoterInterface::ACCESS_GRANTED],
 
             // Test mixed Types
-            array(array(), array(array()), VoterInterface::ACCESS_ABSTAIN),
-            array(array(), array(new \stdClass()), VoterInterface::ACCESS_ABSTAIN),
-            array(array('ROLE_BAR'), array(new Role('ROLE_BAR')), VoterInterface::ACCESS_GRANTED),
-            array(array('ROLE_BAR'), array(new Role('ROLE_FOO')), VoterInterface::ACCESS_DENIED),
-        );
+            [[], [[]], VoterInterface::ACCESS_ABSTAIN],
+            [[], [new \stdClass()], VoterInterface::ACCESS_ABSTAIN],
+        ];
     }
 
-    protected function getToken(array $roles)
+    /**
+     * @dataProvider provideAttributes
+     */
+    public function testSupportsAttribute(string $prefix, string $attribute, bool $expected)
     {
-        foreach ($roles as $i => $role) {
-            $roles[$i] = new Role($role);
-        }
-        $token = $this->getMockBuilder('Symfony\Component\Security\Core\Authentication\Token\TokenInterface')->getMock();
+        $voter = new RoleVoter($prefix);
+
+        $this->assertSame($expected, $voter->supportsAttribute($attribute));
+    }
+
+    public static function provideAttributes()
+    {
+        yield ['ROLE_', 'ROLE_foo', true];
+        yield ['ROLE_', 'ROLE_', true];
+        yield ['FOO_', 'FOO_bar', true];
+
+        yield ['ROLE_', '', false];
+        yield ['ROLE_', 'foo', false];
+    }
+
+    public function testSupportsType()
+    {
+        $voter = new AuthenticatedVoter(new AuthenticationTrustResolver());
+
+        $this->assertTrue($voter->supportsType(get_debug_type('foo')));
+        $this->assertTrue($voter->supportsType(get_debug_type(null)));
+        $this->assertTrue($voter->supportsType(get_debug_type(new \stdClass())));
+    }
+
+    protected function getTokenWithRoleNames(array $roles)
+    {
+        $token = $this->createMock(AbstractToken::class);
         $token->expects($this->once())
-              ->method('getRoles')
-              ->will($this->returnValue($roles));
+              ->method('getRoleNames')
+              ->willReturn($roles);
 
         return $token;
     }

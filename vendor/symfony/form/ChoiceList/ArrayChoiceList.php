@@ -11,15 +11,14 @@
 
 namespace Symfony\Component\Form\ChoiceList;
 
-use Symfony\Component\Form\Exception\UnexpectedTypeException;
-
 /**
  * A list of choices with arbitrary data types.
  *
  * The user of this class is responsible for assigning string values to the
- * choices. Both the choices and their values are passed to the constructor.
- * Each choice must have a corresponding value (with the same array key) in
- * the value array.
+ * choices and for their uniqueness.
+ * Both the choices and their values are passed to the constructor.
+ * Each choice must have a corresponding value (with the same key) in
+ * the values array.
  *
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
@@ -45,12 +44,6 @@ class ArrayChoiceList implements ChoiceListInterface
      * @var int[]|string[]
      */
     protected $originalKeys;
-
-    /**
-     * The callback for creating the value for a choice.
-     *
-     * @var callable
-     */
     protected $valueCallback;
 
     /**
@@ -64,29 +57,24 @@ class ArrayChoiceList implements ChoiceListInterface
      *                               incrementing integers are used as
      *                               values
      */
-    public function __construct($choices, $value = null)
+    public function __construct(iterable $choices, callable $value = null)
     {
-        if (null !== $value && !is_callable($value)) {
-            throw new UnexpectedTypeException($value, 'null or callable');
-        }
-
         if ($choices instanceof \Traversable) {
             $choices = iterator_to_array($choices);
         }
 
         if (null === $value && $this->castableToString($choices)) {
-            $value = function ($choice) {
-                return false === $choice ? '0' : (string) $choice;
-            };
+            $value = static fn ($choice) => false === $choice ? '0' : (string) $choice;
         }
 
         if (null !== $value) {
             // If a deterministic value generator was passed, use it later
             $this->valueCallback = $value;
         } else {
-            // Otherwise simply generate incrementing integers as values
-            $i = 0;
-            $value = function () use (&$i) {
+            // Otherwise generate incrementing integers as values
+            $value = static function () {
+                static $i = 0;
+
                 return $i++;
             };
         }
@@ -101,47 +89,32 @@ class ArrayChoiceList implements ChoiceListInterface
         $this->structuredValues = $structuredValues;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getChoices()
+    public function getChoices(): array
     {
         return $this->choices;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getValues()
+    public function getValues(): array
     {
         return array_map('strval', array_keys($this->choices));
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getStructuredValues()
+    public function getStructuredValues(): array
     {
         return $this->structuredValues;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getOriginalKeys()
+    public function getOriginalKeys(): array
     {
         return $this->originalKeys;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getChoicesForValues(array $values)
+    public function getChoicesForValues(array $values): array
     {
-        $choices = array();
+        $choices = [];
 
         foreach ($values as $i => $givenValue) {
-            if (array_key_exists($givenValue, $this->choices)) {
+            if (\array_key_exists($givenValue, $this->choices)) {
                 $choices[$i] = $this->choices[$givenValue];
             }
         }
@@ -149,19 +122,16 @@ class ArrayChoiceList implements ChoiceListInterface
         return $choices;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getValuesForChoices(array $choices)
+    public function getValuesForChoices(array $choices): array
     {
-        $values = array();
+        $values = [];
 
         // Use the value callback to compare choices by their values, if present
         if ($this->valueCallback) {
-            $givenValues = array();
+            $givenValues = [];
 
             foreach ($choices as $i => $givenChoice) {
-                $givenValues[$i] = (string) call_user_func($this->valueCallback, $givenChoice);
+                $givenValues[$i] = (string) ($this->valueCallback)($givenChoice);
             }
 
             return array_intersect($givenValues, array_keys($this->choices));
@@ -183,32 +153,32 @@ class ArrayChoiceList implements ChoiceListInterface
     /**
      * Flattens an array into the given output variables.
      *
-     * @param array    $choices          The array to flatten
-     * @param callable $value            The callable for generating choice values
-     * @param array    $choicesByValues  The flattened choices indexed by the
-     *                                   corresponding values
-     * @param array    $keysByValues     The original keys indexed by the
-     *                                   corresponding values
-     * @param array    $structuredValues The values indexed by the original keys
+     * @param array      $choices          The array to flatten
+     * @param callable   $value            The callable for generating choice values
+     * @param array|null $choicesByValues  The flattened choices indexed by the
+     *                                     corresponding values
+     * @param array|null $keysByValues     The original keys indexed by the
+     *                                     corresponding values
+     * @param array|null $structuredValues The values indexed by the original keys
      *
-     * @internal Must not be used by user-land code
+     * @internal
      */
-    protected function flatten(array $choices, $value, &$choicesByValues, &$keysByValues, &$structuredValues)
+    protected function flatten(array $choices, callable $value, ?array &$choicesByValues, ?array &$keysByValues, ?array &$structuredValues): void
     {
         if (null === $choicesByValues) {
-            $choicesByValues = array();
-            $keysByValues = array();
-            $structuredValues = array();
+            $choicesByValues = [];
+            $keysByValues = [];
+            $structuredValues = [];
         }
 
         foreach ($choices as $key => $choice) {
-            if (is_array($choice)) {
+            if (\is_array($choice)) {
                 $this->flatten($choice, $value, $choicesByValues, $keysByValues, $structuredValues[$key]);
 
                 continue;
             }
 
-            $choiceValue = (string) call_user_func($value, $choice);
+            $choiceValue = (string) $value($choice);
             $choicesByValues[$choiceValue] = $choice;
             $keysByValues[$choiceValue] = $key;
             $structuredValues[$key] = $choiceValue;
@@ -218,26 +188,23 @@ class ArrayChoiceList implements ChoiceListInterface
     /**
      * Checks whether the given choices can be cast to strings without
      * generating duplicates.
-     *
-     * @param array      $choices The choices
-     * @param array|null $cache   The cache for previously checked entries. Internal
-     *
-     * @return bool returns true if the choices can be cast to strings and
-     *              false otherwise
+     * This method is responsible for preventing conflict between scalar values
+     * and the empty value.
      */
-    private function castableToString(array $choices, array &$cache = array())
+    private function castableToString(array $choices, array &$cache = []): bool
     {
         foreach ($choices as $choice) {
-            if (is_array($choice)) {
+            if (\is_array($choice)) {
                 if (!$this->castableToString($choice, $cache)) {
                     return false;
                 }
 
                 continue;
-            } elseif (!is_scalar($choice)) {
+            } elseif (!\is_scalar($choice)) {
                 return false;
             }
 
+            // prevent having false casted to the empty string by isset()
             $choice = false === $choice ? '0' : (string) $choice;
 
             if (isset($cache[$choice])) {

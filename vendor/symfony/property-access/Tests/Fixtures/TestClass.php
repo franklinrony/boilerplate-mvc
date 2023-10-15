@@ -25,7 +25,9 @@ class TestClass
     private $publicAccessorWithMoreRequiredParameters;
     private $publicIsAccessor;
     private $publicHasAccessor;
+    private $publicCanAccessor;
     private $publicGetter;
+    private $date;
 
     public function __construct($value)
     {
@@ -38,6 +40,7 @@ class TestClass
         $this->publicAccessorWithMoreRequiredParameters = $value;
         $this->publicIsAccessor = $value;
         $this->publicHasAccessor = $value;
+        $this->publicCanAccessor = $value;
         $this->publicGetter = $value;
     }
 
@@ -46,7 +49,7 @@ class TestClass
         $this->publicAccessor = $value;
     }
 
-    public function setPublicAccessorWithDefaultValue($value = null)
+    public function setPublicAccessorWithDefaultValue($value)
     {
         $this->publicAccessorWithDefaultValue = $value;
     }
@@ -64,6 +67,11 @@ class TestClass
     public function getPublicAccessor()
     {
         return $this->publicAccessor;
+    }
+
+    public function isPublicAccessor($param)
+    {
+        throw new \LogicException('This method should never have been called.');
     }
 
     public function getPublicAccessorWithDefaultValue()
@@ -99,6 +107,16 @@ class TestClass
     public function hasPublicHasAccessor()
     {
         return $this->publicHasAccessor;
+    }
+
+    public function setPublicCanAccessor($value)
+    {
+        $this->publicCanAccessor = $value;
+    }
+
+    public function canPublicCanAccessor()
+    {
+        return $this->publicCanAccessor;
     }
 
     public function publicGetSetter($value = null)
@@ -172,5 +190,15 @@ class TestClass
     public function getPublicGetter()
     {
         return $this->publicGetter;
+    }
+
+    public function setDate(\DateTimeInterface $date)
+    {
+        $this->date = $date;
+    }
+
+    public function getDate()
+    {
+        return $this->date;
     }
 }

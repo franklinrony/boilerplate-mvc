@@ -500,22 +500,22 @@ namespace {
             // Create Router
             $router = new \Bramus\Router\Router();
             $router->get('/blog(/\d{4}(/\d{2}(/\d{2}(/[a-z0-9_-]+)?)?)?)?', function ($year = null, $month = null, $day = null, $slug = null) {
-                if (!$year) {
+                if ($year === null) {
                     echo 'Blog overview';
 
                     return;
                 }
-                if (!$month) {
+                if ($month === null) {
                     echo 'Blog year overview (' . $year . ')';
 
                     return;
                 }
-                if (!$day) {
+                if ($day === null) {
                     echo 'Blog month overview (' . $year . '-' . $month . ')';
 
                     return;
                 }
-                if (!$slug) {
+                if ($slug === null) {
                     echo 'Blog day overview (' . $year . '-' . $month . '-' . $day . ')';
 
                     return;
@@ -628,6 +628,10 @@ namespace {
                 echo 'route not found';
             });
 
+            $router->set404('/api(/.*)?', function () {
+                echo 'api route not found';
+            });
+
             // Test the /hello route
             ob_start();
             $_SERVER['REQUEST_URI'] = '/';
@@ -639,6 +643,12 @@ namespace {
             $_SERVER['REQUEST_URI'] = '/foo';
             $router->run();
             $this->assertEquals('route not found', ob_get_contents());
+
+            // Test the custom api 404
+            ob_clean();
+            $_SERVER['REQUEST_URI'] = '/api/getUser';
+            $router->run();
+            $this->assertEquals('api route not found', ob_get_contents());
 
             // Cleanup
             ob_end_clean();
@@ -689,6 +699,27 @@ namespace {
             // Test the /hello/bramus route
             ob_clean();
             $_SERVER['REQUEST_URI'] = '/foo';
+            $router->run();
+            $this->assertEquals('route not found', ob_get_contents());
+
+            // Cleanup
+            ob_end_clean();
+        }
+
+        public function test404WithManualTrigger()
+        {
+            // Create Router
+            $router = new \Bramus\Router\Router();
+            $router->get('/', function() use ($router) {
+                $router->trigger404();
+            });
+            $router->set404(function () {
+                echo 'route not found';
+            });
+
+            // Test the / route
+            ob_start();
+            $_SERVER['REQUEST_URI'] = '/';
             $router->run();
             $this->assertEquals('route not found', ob_get_contents());
 
@@ -865,6 +896,29 @@ namespace {
                 $method->invoke(new \Bramus\Router\Router())
             );
         }
+
+        public function testControllerMethodReturningFalse()
+        {
+            // Create Router
+            $router = new \Bramus\Router\Router();
+            $router->get('/false', 'RouterTestController@returnFalse');
+            $router->get('/static-false', 'RouterTestController@staticReturnFalse');
+
+            // Test returnFalse
+            ob_start();
+            $_SERVER['REQUEST_URI'] = '/false';
+            $router->run();
+            $this->assertEquals('returnFalse', ob_get_contents());
+
+            // Test staticReturnFalse
+            ob_clean();
+            $_SERVER['REQUEST_URI'] = '/static-false';
+            $router->run();
+            $this->assertEquals('staticReturnFalse', ob_get_contents());
+
+            // Cleanup
+            ob_end_clean();
+        }
     }
 }
 
@@ -874,6 +928,20 @@ namespace {
         public function show($id)
         {
             echo $id;
+        }
+
+        public function returnFalse()
+        {
+            echo 'returnFalse';
+
+            return false;
+        }
+
+        public static function staticReturnFalse()
+        {
+            echo 'staticReturnFalse';
+
+            return false;
         }
     }
 }

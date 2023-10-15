@@ -12,22 +12,21 @@
 namespace Symfony\Component\Form\Extension\Core\DataTransformer;
 
 use Symfony\Component\Form\Exception\TransformationFailedException;
-use Symfony\Component\Form\Exception\UnexpectedTypeException;
 
 /**
  * Transforms between a date string and a DateTime object.
  *
  * @author Bernhard Schussek <bschussek@gmail.com>
  * @author Florian Eckerstorfer <florian@eckerstorfer.org>
+ *
+ * @extends BaseDateTimeTransformer<string>
  */
 class DateTimeToStringTransformer extends BaseDateTimeTransformer
 {
     /**
      * Format used for generating strings.
-     *
-     * @var string
      */
-    private $generateFormat;
+    private string $generateFormat;
 
     /**
      * Format used for parsing strings.
@@ -35,29 +34,27 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
      * Different than the {@link $generateFormat} because formats for parsing
      * support additional characters in PHP that are not supported for
      * generating strings.
-     *
-     * @var string
      */
-    private $parseFormat;
+    private string $parseFormat;
 
     /**
      * Transforms a \DateTime instance to a string.
      *
      * @see \DateTime::format() for supported formats
      *
-     * @param string $inputTimezone  The name of the input timezone
-     * @param string $outputTimezone The name of the output timezone
-     * @param string $format         The date format
-     *
-     * @throws UnexpectedTypeException if a timezone is not a string
+     * @param string|null $inputTimezone  The name of the input timezone
+     * @param string|null $outputTimezone The name of the output timezone
+     * @param string      $format         The date format
+     * @param string|null $parseFormat    The parse format when different from $format
      */
-    public function __construct($inputTimezone = null, $outputTimezone = null, $format = 'Y-m-d H:i:s')
+    public function __construct(string $inputTimezone = null, string $outputTimezone = null, string $format = 'Y-m-d H:i:s', string $parseFormat = null)
     {
         parent::__construct($inputTimezone, $outputTimezone);
 
-        $this->generateFormat = $this->parseFormat = $format;
+        $this->generateFormat = $format;
+        $this->parseFormat = $parseFormat ?? $format;
 
-        // See http://php.net/manual/en/datetime.createfromformat.php
+        // See https://php.net/datetime.createfromformat
         // The character "|" in the format makes sure that the parts of a date
         // that are *not* specified in the format are reset to the corresponding
         // values from 1970-01-01 00:00:00 instead of the current time.
@@ -65,7 +62,7 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
         // where the time corresponds to the current server time.
         // With "|" and "Y-m-d", "2010-02-03" becomes "2010-02-03 00:00:00",
         // which is at least deterministic and thus used here.
-        if (false === strpos($this->parseFormat, '|')) {
+        if (!str_contains($this->parseFormat, '|')) {
             $this->parseFormat .= '|';
         }
     }
@@ -74,21 +71,18 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
      * Transforms a DateTime object into a date string with the configured format
      * and timezone.
      *
-     * @param \DateTime|\DateTimeInterface $dateTime A DateTime object
+     * @param \DateTimeInterface $dateTime A DateTimeInterface object
      *
-     * @return string A value as produced by PHP's date() function
-     *
-     * @throws TransformationFailedException If the given value is not an
-     *                                       instance of \DateTime or \DateTimeInterface
+     * @throws TransformationFailedException If the given value is not a \DateTimeInterface
      */
-    public function transform($dateTime)
+    public function transform(mixed $dateTime): string
     {
         if (null === $dateTime) {
             return '';
         }
 
-        if (!$dateTime instanceof \DateTime && !$dateTime instanceof \DateTimeInterface) {
-            throw new TransformationFailedException('Expected a \DateTime or \DateTimeInterface.');
+        if (!$dateTime instanceof \DateTimeInterface) {
+            throw new TransformationFailedException('Expected a \DateTimeInterface.');
         }
 
         if (!$dateTime instanceof \DateTimeImmutable) {
@@ -105,33 +99,26 @@ class DateTimeToStringTransformer extends BaseDateTimeTransformer
      *
      * @param string $value A value as produced by PHP's date() function
      *
-     * @return \DateTime An instance of \DateTime
-     *
      * @throws TransformationFailedException If the given value is not a string,
      *                                       or could not be transformed
      */
-    public function reverseTransform($value)
+    public function reverseTransform(mixed $value): ?\DateTime
     {
         if (empty($value)) {
-            return;
+            return null;
         }
 
-        if (!is_string($value)) {
+        if (!\is_string($value)) {
             throw new TransformationFailedException('Expected a string.');
         }
 
         $outputTz = new \DateTimeZone($this->outputTimezone);
         $dateTime = \DateTime::createFromFormat($this->parseFormat, $value, $outputTz);
 
-        $lastErrors = \DateTime::getLastErrors();
+        $lastErrors = \DateTime::getLastErrors() ?: ['error_count' => 0, 'warning_count' => 0];
 
         if (0 < $lastErrors['warning_count'] || 0 < $lastErrors['error_count']) {
-            throw new TransformationFailedException(
-                implode(', ', array_merge(
-                    array_values($lastErrors['warnings']),
-                    array_values($lastErrors['errors'])
-                ))
-            );
+            throw new TransformationFailedException(implode(', ', array_merge(array_values($lastErrors['warnings']), array_values($lastErrors['errors']))));
         }
 
         try {

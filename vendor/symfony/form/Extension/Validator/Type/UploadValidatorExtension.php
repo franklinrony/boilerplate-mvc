@@ -12,9 +12,10 @@
 namespace Symfony\Component\Form\Extension\Validator\Type;
 
 use Symfony\Component\Form\AbstractTypeExtension;
+use Symfony\Component\Form\Extension\Core\Type\FormType;
 use Symfony\Component\OptionsResolver\Options;
 use Symfony\Component\OptionsResolver\OptionsResolver;
-use Symfony\Component\Translation\TranslatorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * @author Abdellatif Ait boudad <a.aitboudad@gmail.com>
@@ -22,38 +23,27 @@ use Symfony\Component\Translation\TranslatorInterface;
  */
 class UploadValidatorExtension extends AbstractTypeExtension
 {
-    private $translator;
-    private $translationDomain;
+    private TranslatorInterface $translator;
+    private ?string $translationDomain;
 
-    /**
-     * @param TranslatorInterface $translator        The translator for translating error messages
-     * @param null|string         $translationDomain The translation domain for translating
-     */
-    public function __construct(TranslatorInterface $translator, $translationDomain = null)
+    public function __construct(TranslatorInterface $translator, string $translationDomain = null)
     {
         $this->translator = $translator;
         $this->translationDomain = $translationDomain;
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function configureOptions(OptionsResolver $resolver)
     {
         $translator = $this->translator;
         $translationDomain = $this->translationDomain;
-        $resolver->setNormalizer('upload_max_size_message', function (Options $options, $message) use ($translator, $translationDomain) {
-            return function () use ($translator, $translationDomain, $message) {
-                return $translator->trans(call_user_func($message), array(), $translationDomain);
-            };
-        });
+        $resolver->setNormalizer('upload_max_size_message', static fn (Options $options, $message) => static fn () => $translator->trans($message(), [], $translationDomain));
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getExtendedType()
+    public static function getExtendedTypes(): iterable
     {
-        return 'form';
+        return [FormType::class];
     }
 }

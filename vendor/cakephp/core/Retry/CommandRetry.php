@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,68 +16,80 @@
  */
 namespace Cake\Core\Retry;
 
+use Closure;
 use Exception;
 
 /**
  * Allows any action to be retried in case of an exception.
  *
  * This class can be parametrized with a strategy, which will be followed
- * to determine whether or not the action should be retried.
+ * to determine whether the action should be retried.
  */
 class CommandRetry
 {
-
     /**
      * The strategy to follow should the executed action fail.
      *
      * @var \Cake\Core\Retry\RetryStrategyInterface
      */
-    protected $strategy;
+    protected RetryStrategyInterface $strategy;
 
     /**
-     * The number of retries to perform in case of failure.
-     *
      * @var int
      */
-    protected $retries;
+    protected int $maxRetries;
+
+    /**
+     * @var int
+     */
+    protected int $numRetries;
 
     /**
      * Creates the CommandRetry object with the given strategy and retry count
      *
      * @param \Cake\Core\Retry\RetryStrategyInterface $strategy The strategy to follow should the action fail
-     * @param int $retries The number of times the action has been already called
+     * @param int $maxRetries The maximum number of retry attempts allowed
      */
-    public function __construct(RetryStrategyInterface $strategy, $retries = 1)
+    public function __construct(RetryStrategyInterface $strategy, int $maxRetries = 1)
     {
         $this->strategy = $strategy;
-        $this->retries = $retries;
+        $this->maxRetries = $maxRetries;
     }
 
     /**
      * The number of retries to perform in case of failure
      *
-     * @param callable $action The callable action to execute with a retry strategy
+     * @param \Closure $action Callback to run for each attempt
      * @return mixed The return value of the passed action callable
-     * @throws \Exception
+     * @throws \Exception Throws exception from last failure
      */
-    public function run(callable $action)
+    public function run(Closure $action): mixed
     {
-        $retryCount = 0;
-        $lastException = null;
-
-        do {
+        $this->numRetries = 0;
+        while (true) {
             try {
                 return $action();
             } catch (Exception $e) {
-                $lastException = $e;
-                if (!$this->strategy->shouldRetry($e, $retryCount)) {
-                    throw $e;
+                if (
+                    $this->numRetries < $this->maxRetries &&
+                    $this->strategy->shouldRetry($e, $this->numRetries)
+                ) {
+                    $this->numRetries++;
+                    continue;
                 }
-            }
-        } while ($this->retries > $retryCount++);
 
-        if ($lastException !== null) {
-            throw $lastException;
+                throw $e;
+            }
         }
+    }
+
+    /**
+     * Returns the last number of retry attemps.
+     *
+     * @return int
+     */
+    public function getRetries(): int
+    {
+        return $this->numRetries;
     }
 }

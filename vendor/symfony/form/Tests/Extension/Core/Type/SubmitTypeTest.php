@@ -11,16 +11,18 @@
 
 namespace Symfony\Component\Form\Tests\Extension\Core\Type;
 
+use Symfony\Component\Form\SubmitButton;
+
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class SubmitTypeTest extends ButtonTypeTest
 {
-    const TESTED_TYPE = 'submit';
+    public const TESTED_TYPE = 'Symfony\Component\Form\Extension\Core\Type\SubmitType';
 
     public function testCreateSubmitButtonInstances()
     {
-        $this->assertInstanceOf('Symfony\Component\Form\SubmitButton', $this->factory->create(static::TESTED_TYPE));
+        $this->assertInstanceOf(SubmitButton::class, $this->factory->create(static::TESTED_TYPE));
     }
 
     public function testNotClickedByDefault()
@@ -61,5 +63,12 @@ class SubmitTypeTest extends ButtonTypeTest
             ->getForm();
 
         $this->assertSame($form, $form->add('send', static::TESTED_TYPE));
+    }
+
+    public function testFormNoValidate()
+    {
+        $this->assertTrue($this->factory->create(static::TESTED_TYPE, null, [
+            'validate' => false,
+        ])->createView()->vars['attr']['formnovalidate']);
     }
 }

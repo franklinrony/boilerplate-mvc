@@ -1,31 +1,11 @@
 <?php
+declare(strict_types=1);
+
 /**
- * Phinx
- *
- * (The MIT license)
- * Copyright (c) 2015 Rob Morgan
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated * documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- * @package    Phinx
- * @subpackage Phinx\Db\Adapter
+ * MIT License
+ * For full license information, please view the LICENSE file that was distributed with this source code.
  */
+
 namespace Phinx\Db\Adapter;
 
 use Phinx\Db\Action\AddColumn;
@@ -47,36 +27,34 @@ use Phinx\Migration\IrreversibleMigrationException;
  * Phinx Proxy Adapter.
  *
  * Used for recording migration commands to automatically reverse them.
- *
- * @author Rob Morgan <robbym@gmail.com>
  */
 class ProxyAdapter extends AdapterWrapper
 {
     /**
-     * @var array
+     * @var \Phinx\Db\Action\Action[]
      */
-    protected $commands = [];
+    protected array $commands = [];
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function getAdapterType()
+    public function getAdapterType(): string
     {
         return 'ProxyAdapter';
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function createTable(Table $table, array $columns = [], array $indexes = [])
+    public function createTable(Table $table, array $columns = [], array $indexes = []): void
     {
         $this->commands[] = new CreateTable($table);
     }
 
     /**
-     * {@inheritdoc}
+     * @inheritDoc
      */
-    public function executeActions(Table $table, array $actions)
+    public function executeActions(Table $table, array $actions): void
     {
         $this->commands = array_merge($this->commands, $actions);
     }
@@ -87,43 +65,49 @@ class ProxyAdapter extends AdapterWrapper
      * @throws \Phinx\Migration\IrreversibleMigrationException if a command cannot be reversed.
      * @return \Phinx\Db\Plan\Intent
      */
-    public function getInvertedCommands()
+    public function getInvertedCommands(): Intent
     {
         $inverted = new Intent();
 
-        foreach (array_reverse($this->commands) as $com) {
+        foreach (array_reverse($this->commands) as $command) {
             switch (true) {
-                case $com instanceof CreateTable:
-                    $inverted->addAction(new DropTable($com->getTable()));
+                case $command instanceof CreateTable:
+                    /** @var \Phinx\Db\Action\CreateTable $command */
+                    $inverted->addAction(new DropTable($command->getTable()));
                     break;
 
-                case $com instanceof RenameTable:
-                    $inverted->addAction(new RenameTable(new Table($com->getNewName()), $com->getTable()->getName()));
+                case $command instanceof RenameTable:
+                    /** @var \Phinx\Db\Action\RenameTable $command */
+                    $inverted->addAction(new RenameTable(new Table($command->getNewName()), $command->getTable()->getName()));
                     break;
 
-                case $com instanceof AddColumn:
-                    $inverted->addAction(new RemoveColumn($com->getTable(), $com->getColumn()));
+                case $command instanceof AddColumn:
+                    /** @var \Phinx\Db\Action\AddColumn $command */
+                    $inverted->addAction(new RemoveColumn($command->getTable(), $command->getColumn()));
                     break;
 
-                case $com instanceof RenameColumn:
-                    $column = clone $com->getColumn();
+                case $command instanceof RenameColumn:
+                    /** @var \Phinx\Db\Action\RenameColumn $command */
+                    $column = clone $command->getColumn();
                     $name = $column->getName();
-                    $column->setName($com->getNewName());
-                    $inverted->addAction(new RenameColumn($com->getTable(), $column, $name));
+                    $column->setName($command->getNewName());
+                    $inverted->addAction(new RenameColumn($command->getTable(), $column, $name));
                     break;
 
-                case $com instanceof AddIndex:
-                    $inverted->addAction(new DropIndex($com->getTable(), $com->getIndex()));
+                case $command instanceof AddIndex:
+                    /** @var \Phinx\Db\Action\AddIndex $command */
+                    $inverted->addAction(new DropIndex($command->getTable(), $command->getIndex()));
                     break;
 
-                case $com instanceof AddForeignKey:
-                    $inverted->addAction(new DropForeignKey($com->getTable(), $com->getForeignKey()));
+                case $command instanceof AddForeignKey:
+                    /** @var \Phinx\Db\Action\AddForeignKey $command */
+                    $inverted->addAction(new DropForeignKey($command->getTable(), $command->getForeignKey()));
                     break;
 
                 default:
                     throw new IrreversibleMigrationException(sprintf(
                         'Cannot reverse a "%s" command',
-                        get_class($com)
+                        get_class($command)
                     ));
             }
         }
@@ -136,7 +120,7 @@ class ProxyAdapter extends AdapterWrapper
      *
      * @return void
      */
-    public function executeInvertedCommands()
+    public function executeInvertedCommands(): void
     {
         $plan = new Plan($this->getInvertedCommands());
         $plan->executeInverse($this->getAdapter());

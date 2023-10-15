@@ -22,11 +22,10 @@ namespace Symfony\Component\Security\Core\Exception;
  */
 class CustomUserMessageAuthenticationException extends AuthenticationException
 {
-    private $messageKey;
+    private string $messageKey;
+    private array $messageData = [];
 
-    private $messageData = array();
-
-    public function __construct($message = '', array $messageData = array(), $code = 0, \Exception $previous = null)
+    public function __construct(string $message = '', array $messageData = [], int $code = 0, \Throwable $previous = null)
     {
         parent::__construct($message, $code, $previous);
 
@@ -38,42 +37,34 @@ class CustomUserMessageAuthenticationException extends AuthenticationException
      *
      * @param string $messageKey  The message or message key
      * @param array  $messageData Data to be passed into the translator
+     *
+     * @return void
      */
-    public function setSafeMessage($messageKey, array $messageData = array())
+    public function setSafeMessage(string $messageKey, array $messageData = [])
     {
         $this->messageKey = $messageKey;
         $this->messageData = $messageData;
     }
 
-    public function getMessageKey()
+    public function getMessageKey(): string
     {
         return $this->messageKey;
     }
 
-    public function getMessageData()
+    public function getMessageData(): array
     {
         return $this->messageData;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function serialize()
+    public function __serialize(): array
     {
-        return serialize(array(
-            parent::serialize(),
-            $this->messageKey,
-            $this->messageData,
-        ));
+        return [parent::__serialize(), $this->messageKey, $this->messageData];
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function unserialize($str)
+    public function __unserialize(array $data): void
     {
-        list($parentData, $this->messageKey, $this->messageData) = unserialize($str);
-
-        parent::unserialize($parentData);
+        [$parentData, $this->messageKey, $this->messageData] = $data;
+        $parentData = \is_array($parentData) ? $parentData : unserialize($parentData);
+        parent::__unserialize($parentData);
     }
 }

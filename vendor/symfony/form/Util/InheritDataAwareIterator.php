@@ -23,6 +23,15 @@ namespace Symfony\Component\Form\Util;
  *
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
-class InheritDataAwareIterator extends VirtualFormAwareIterator
+class InheritDataAwareIterator extends \IteratorIterator implements \RecursiveIterator
 {
+    public function getChildren(): static
+    {
+        return new static($this->current());
+    }
+
+    public function hasChildren(): bool
+    {
+        return (bool) $this->current()->getConfig()->getInheritData();
+    }
 }

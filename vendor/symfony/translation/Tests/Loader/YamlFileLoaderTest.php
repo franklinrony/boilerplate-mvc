@@ -12,8 +12,10 @@
 namespace Symfony\Component\Translation\Tests\Loader;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Translation\Loader\YamlFileLoader;
 use Symfony\Component\Config\Resource\FileResource;
+use Symfony\Component\Translation\Exception\InvalidResourceException;
+use Symfony\Component\Translation\Exception\NotFoundResourceException;
+use Symfony\Component\Translation\Loader\YamlFileLoader;
 
 class YamlFileLoaderTest extends TestCase
 {
@@ -23,9 +25,18 @@ class YamlFileLoaderTest extends TestCase
         $resource = __DIR__.'/../fixtures/resources.yml';
         $catalogue = $loader->load($resource, 'en', 'domain1');
 
-        $this->assertEquals(array('foo' => 'bar'), $catalogue->all('domain1'));
+        $this->assertEquals(['foo' => 'bar'], $catalogue->all('domain1'));
         $this->assertEquals('en', $catalogue->getLocale());
-        $this->assertEquals(array(new FileResource($resource)), $catalogue->getResources());
+        $this->assertEquals([new FileResource($resource)], $catalogue->getResources());
+    }
+
+    public function testLoadNonStringMessages()
+    {
+        $loader = new YamlFileLoader();
+        $resource = __DIR__.'/../fixtures/non-string.yml';
+        $catalogue = $loader->load($resource, 'en', 'domain1');
+
+        $this->assertSame(['root.foo2' => '', 'root.bar' => 'bar'], $catalogue->all('domain1'));
     }
 
     public function testLoadDoesNothingIfEmpty()
@@ -34,36 +45,30 @@ class YamlFileLoaderTest extends TestCase
         $resource = __DIR__.'/../fixtures/empty.yml';
         $catalogue = $loader->load($resource, 'en', 'domain1');
 
-        $this->assertEquals(array(), $catalogue->all('domain1'));
+        $this->assertEquals([], $catalogue->all('domain1'));
         $this->assertEquals('en', $catalogue->getLocale());
-        $this->assertEquals(array(new FileResource($resource)), $catalogue->getResources());
+        $this->assertEquals([new FileResource($resource)], $catalogue->getResources());
     }
 
-    /**
-     * @expectedException \Symfony\Component\Translation\Exception\NotFoundResourceException
-     */
     public function testLoadNonExistingResource()
     {
+        $this->expectException(NotFoundResourceException::class);
         $loader = new YamlFileLoader();
         $resource = __DIR__.'/../fixtures/non-existing.yml';
         $loader->load($resource, 'en', 'domain1');
     }
 
-    /**
-     * @expectedException \Symfony\Component\Translation\Exception\InvalidResourceException
-     */
     public function testLoadThrowsAnExceptionIfFileNotLocal()
     {
+        $this->expectException(InvalidResourceException::class);
         $loader = new YamlFileLoader();
         $resource = 'http://example.com/resources.yml';
         $loader->load($resource, 'en', 'domain1');
     }
 
-    /**
-     * @expectedException \Symfony\Component\Translation\Exception\InvalidResourceException
-     */
     public function testLoadThrowsAnExceptionIfNotAnArray()
     {
+        $this->expectException(InvalidResourceException::class);
         $loader = new YamlFileLoader();
         $resource = __DIR__.'/../fixtures/non-valid.yml';
         $loader->load($resource, 'en', 'domain1');

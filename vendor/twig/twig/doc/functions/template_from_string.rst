@@ -1,24 +1,41 @@
 ``template_from_string``
 ========================
 
-.. versionadded:: 1.11
-    The ``template_from_string`` function was added in Twig 1.11.
-
 The ``template_from_string`` function loads a template from a string:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {{ include(template_from_string("Hello {{ name }}")) }}
     {{ include(template_from_string(page.template)) }}
 
+To ease debugging, you can also give the template a name that will be part of
+any related error message:
+
+.. code-block:: twig
+
+    {{ include(template_from_string(page.template, "template for page " ~ page.name)) }}
+
 .. note::
 
-    The ``template_from_string`` function is not available by default. You
-    must add the ``\Twig\Extension\StringLoaderExtension`` extension explicitly when
-    creating your Twig environment::
+    The ``template_from_string`` function is not available by default.
+
+    On Symfony projects, you need to load it in your ``services.yaml`` file:
+
+    .. code-block:: yaml
+
+        services:
+            Twig\Extension\StringLoaderExtension:
+
+    or ``services.php`` file::
+
+        $services->set(\Twig\Extension\StringLoaderExtension::class);
+
+    Otherwise, add the extension explicitly on the Twig environment::
+
+        use Twig\Extension\StringLoaderExtension;
 
         $twig = new \Twig\Environment(...);
-        $twig->addExtension(new \Twig\Extension\StringLoaderExtension());
+        $twig->addExtension(new StringLoaderExtension());
 
 .. note::
 
@@ -30,3 +47,4 @@ Arguments
 ---------
 
 * ``template``: The template
+* ``name``: A name for the template

@@ -1,12 +1,9 @@
 ``slice``
 ===========
 
-.. versionadded:: 1.6
-    The ``slice`` filter was added in Twig 1.6.
-
 The ``slice`` filter extracts a slice of a sequence, a mapping, or a string:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {% for i in [1, 2, 3, 4, 5]|slice(1, 2) %}
         {# will iterate over 2 and 3 #}
@@ -18,7 +15,7 @@ The ``slice`` filter extracts a slice of a sequence, a mapping, or a string:
 
 You can use any valid expression for both the start and the length:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {% for i in [1, 2, 3, 4, 5]|slice(start, length) %}
         {# ... #}
@@ -26,7 +23,7 @@ You can use any valid expression for both the start and the length:
 
 As syntactic sugar, you can also use the ``[]`` notation:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {% for i in [1, 2, 3, 4, 5][start:length] %}
         {# ... #}
@@ -39,6 +36,9 @@ As syntactic sugar, you can also use the ``[]`` notation:
 
     {# you can omit the last argument -- which will select everything till the end #}
     {{ '12345'[2:] }} {# will display "345" #}
+
+    {# you can use a negative value -- for example to remove characters at the end #}
+    {{ '12345'[:-2] }} {# will display "123" #}
 
 The ``slice`` filter works as the `array_slice`_ PHP function for arrays and
 `mb_substr`_ for strings with a fallback to `substr`_.
@@ -65,7 +65,7 @@ Arguments
 * ``length``:        The size of the slice
 * ``preserve_keys``: Whether to preserve key or not (when the input is an array)
 
-.. _`Traversable`: https://secure.php.net/manual/en/class.traversable.php
-.. _`array_slice`: https://secure.php.net/array_slice
-.. _`mb_substr` :  https://secure.php.net/mb-substr
-.. _`substr`:      https://secure.php.net/substr
+.. _`Traversable`: https://www.php.net/manual/en/class.traversable.php
+.. _`array_slice`: https://www.php.net/array_slice
+.. _`mb_substr`:   https://www.php.net/mb-substr
+.. _`substr`:      https://www.php.net/substr

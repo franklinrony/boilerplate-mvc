@@ -12,83 +12,85 @@
 namespace Symfony\Component\Form\Tests\Extension\DependencyInjection;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\Form\AbstractTypeExtension;
+use Symfony\Component\Form\Exception\InvalidArgumentException;
 use Symfony\Component\Form\Extension\DependencyInjection\DependencyInjectionExtension;
+use Symfony\Component\Form\FormTypeGuesserChain;
 
 class DependencyInjectionExtensionTest extends TestCase
 {
     public function testGetTypeExtensions()
     {
-        $container = $this->getMockBuilder('Symfony\Component\DependencyInjection\ContainerInterface')->getMock();
+        $typeExtension1 = new TestTypeExtension();
+        $typeExtension2 = new TestTypeExtension();
+        $typeExtension3 = new OtherTypeExtension();
+        $typeExtension4 = new MultipleTypesTypeExtension();
 
-        $services = array(
-            'extension1' => $typeExtension1 = $this->createFormTypeExtensionMock('test'),
-            'extension2' => $typeExtension2 = $this->createFormTypeExtensionMock('test'),
-            'extension3' => $typeExtension3 = $this->createFormTypeExtensionMock('other'),
-        );
+        $extensions = [
+            'test' => new \ArrayIterator([$typeExtension1, $typeExtension2, $typeExtension4]),
+            'other' => new \ArrayIterator([$typeExtension3, $typeExtension4]),
+        ];
 
-        $container->expects($this->any())
-            ->method('get')
-            ->willReturnCallback(function ($id) use ($services) {
-                if (isset($services[$id])) {
-                    return $services[$id];
-                }
-
-                throw new ServiceNotFoundException($id);
-            });
-
-        $extension = new DependencyInjectionExtension($container, array(), array('test' => array('extension1', 'extension2'), 'other' => array('extension3')), array());
+        $extension = new DependencyInjectionExtension(new ContainerBuilder(), $extensions, []);
 
         $this->assertTrue($extension->hasTypeExtensions('test'));
+        $this->assertTrue($extension->hasTypeExtensions('other'));
         $this->assertFalse($extension->hasTypeExtensions('unknown'));
-        $this->assertSame(array($typeExtension1, $typeExtension2), $extension->getTypeExtensions('test'));
+        $this->assertSame([$typeExtension1, $typeExtension2, $typeExtension4], $extension->getTypeExtensions('test'));
+        $this->assertSame([$typeExtension3, $typeExtension4], $extension->getTypeExtensions('other'));
     }
 
     public function testThrowExceptionForInvalidExtendedType()
     {
-        $formTypeExtension = $this->createFormTypeExtensionMock('unmatched');
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('The extended type "unmatched" specified for the type extension class "%s" does not match any of the actual extended types (["test"]).', TestTypeExtension::class));
 
-        $container = $this->getMockBuilder('Symfony\Component\DependencyInjection\ContainerInterface')->getMock();
+        $extensions = [
+            'unmatched' => new \ArrayIterator([new TestTypeExtension()]),
+        ];
 
-        $container->expects($this->any())
-            ->method('get')
-            ->with('extension')
-            ->willReturn($formTypeExtension);
+        $extension = new DependencyInjectionExtension(new ContainerBuilder(), $extensions, []);
 
-        $extension = new DependencyInjectionExtension($container, array(), array('test' => array('extension')), array());
-
-        $extensions = $extension->getTypeExtensions('test');
-
-        $this->assertCount(1, $extensions);
-        $this->assertSame($formTypeExtension, $extensions[0]);
+        $extension->getTypeExtensions('unmatched');
     }
 
     public function testGetTypeGuesser()
     {
-        $container = $this->getMockBuilder('Symfony\Component\DependencyInjection\ContainerInterface')->getMock();
-        $container
-            ->expects($this->once())
-            ->method('get')
-            ->with('foo')
-            ->willReturn($this->getMockBuilder('Symfony\Component\Form\FormTypeGuesserInterface')->getMock());
-        $extension = new DependencyInjectionExtension($container, array(), array(), array('foo'));
+        $extension = new DependencyInjectionExtension(new ContainerBuilder(), [], [new FormTypeGuesserChain([])]);
 
-        $this->assertInstanceOf('Symfony\Component\Form\FormTypeGuesserChain', $extension->getTypeGuesser());
+        $this->assertInstanceOf(FormTypeGuesserChain::class, $extension->getTypeGuesser());
     }
 
     public function testGetTypeGuesserReturnsNullWhenNoTypeGuessersHaveBeenConfigured()
     {
-        $container = $this->getMockBuilder('Symfony\Component\DependencyInjection\ContainerInterface')->getMock();
-        $extension = new DependencyInjectionExtension($container, array(), array(), array());
+        $extension = new DependencyInjectionExtension(new ContainerBuilder(), [], []);
 
         $this->assertNull($extension->getTypeGuesser());
     }
+}
 
-    private function createFormTypeExtensionMock($extendedType)
+class TestTypeExtension extends AbstractTypeExtension
+{
+    public static function getExtendedTypes(): iterable
     {
-        $extension = $this->getMockBuilder('Symfony\Component\Form\FormTypeExtensionInterface')->getMock();
-        $extension->expects($this->any())->method('getExtendedType')->willReturn($extendedType);
+        return ['test'];
+    }
+}
 
-        return $extension;
+class OtherTypeExtension extends AbstractTypeExtension
+{
+    public static function getExtendedTypes(): iterable
+    {
+        return ['other'];
+    }
+}
+
+class MultipleTypesTypeExtension extends AbstractTypeExtension
+{
+    public static function getExtendedTypes(): iterable
+    {
+        yield 'test';
+        yield 'other';
     }
 }

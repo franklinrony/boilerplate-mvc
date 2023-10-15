@@ -12,6 +12,10 @@
 namespace Symfony\Component\Console\Tests\Input;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Console\Completion\CompletionInput;
+use Symfony\Component\Console\Completion\CompletionSuggestions;
+use Symfony\Component\Console\Completion\Suggestion;
+use Symfony\Component\Console\Exception\LogicException;
 use Symfony\Component\Console\Input\InputOption;
 
 class InputOptionTest extends TestCase
@@ -24,13 +28,25 @@ class InputOptionTest extends TestCase
         $this->assertEquals('foo', $option->getName(), '__construct() removes the leading -- of the option name');
     }
 
-    /**
-     * @expectedException        \InvalidArgumentException
-     * @expectedExceptionMessage Impossible to have an option mode VALUE_IS_ARRAY if the option does not accept a value.
-     */
     public function testArrayModeWithoutValue()
     {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Impossible to have an option mode VALUE_IS_ARRAY if the option does not accept a value.');
         new InputOption('foo', 'f', InputOption::VALUE_IS_ARRAY);
+    }
+
+    public function testBooleanWithRequired()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Impossible to have an option mode VALUE_NEGATABLE if the option also accepts a value.');
+        new InputOption('foo', 'f', InputOption::VALUE_REQUIRED | InputOption::VALUE_NEGATABLE);
+    }
+
+    public function testBooleanWithOptional()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Impossible to have an option mode VALUE_NEGATABLE if the option also accepts a value.');
+        new InputOption('foo', 'f', InputOption::VALUE_OPTIONAL | InputOption::VALUE_NEGATABLE);
     }
 
     public function testShortcut()
@@ -73,50 +89,29 @@ class InputOptionTest extends TestCase
         $this->assertTrue($option->isValueOptional(), '__construct() can take "InputOption::VALUE_OPTIONAL" as its mode');
     }
 
-    /**
-     * @dataProvider provideInvalidModes
-     */
-    public function testInvalidModes($mode)
+    public function testInvalidModes()
     {
-        if (method_exists($this, 'expectException')) {
-            $this->expectException('InvalidArgumentException');
-            $this->expectExceptionMessage(sprintf('Option mode "%s" is not valid.', $mode));
-        } else {
-            $this->setExpectedException('InvalidArgumentException', sprintf('Option mode "%s" is not valid.', $mode));
-        }
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Option mode "-1" is not valid.');
 
-        new InputOption('foo', 'f', $mode);
+        new InputOption('foo', 'f', '-1');
     }
 
-    public function provideInvalidModes()
-    {
-        return [
-            ['ANOTHER_ONE'],
-            [-1],
-        ];
-    }
-
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testEmptyNameIsInvalid()
     {
+        $this->expectException(\InvalidArgumentException::class);
         new InputOption('');
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testDoubleDashNameIsInvalid()
     {
+        $this->expectException(\InvalidArgumentException::class);
         new InputOption('--');
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testSingleDashOptionIsInvalid()
     {
+        $this->expectException(\InvalidArgumentException::class);
         new InputOption('foo', '-');
     }
 
@@ -125,7 +120,7 @@ class InputOptionTest extends TestCase
         $option = new InputOption('foo', null, InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY);
         $this->assertTrue($option->isArray(), '->isArray() returns true if the option can be an array');
         $option = new InputOption('foo', null, InputOption::VALUE_NONE);
-        $this->assertFalse($option->isArray(), '->isArray() returns false if the option can not be an array');
+        $this->assertFalse($option->isArray(), '->isArray() returns false if the option cannot be an array');
     }
 
     public function testGetDescription()
@@ -165,22 +160,18 @@ class InputOptionTest extends TestCase
         $this->assertEquals([1, 2], $option->getDefault(), '->setDefault() changes the default value');
     }
 
-    /**
-     * @expectedException        \LogicException
-     * @expectedExceptionMessage Cannot set a default value when using InputOption::VALUE_NONE mode.
-     */
     public function testDefaultValueWithValueNoneMode()
     {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Cannot set a default value when using InputOption::VALUE_NONE mode.');
         $option = new InputOption('foo', 'f', InputOption::VALUE_NONE);
         $option->setDefault('default');
     }
 
-    /**
-     * @expectedException        \LogicException
-     * @expectedExceptionMessage A default value for an array option must be an array.
-     */
     public function testDefaultValueWithIsArrayMode()
     {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('A default value for an array option must be an array.');
         $option = new InputOption('foo', 'f', InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY);
         $option->setDefault('default');
     }
@@ -206,5 +197,42 @@ class InputOptionTest extends TestCase
         $option = new InputOption('foo', 'f', null, 'Some description');
         $option2 = new InputOption('foo', 'f', InputOption::VALUE_OPTIONAL, 'Some description');
         $this->assertFalse($option->equals($option2));
+    }
+
+    public function testSuggestedValuesErrorIfNoValue()
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Cannot set suggested values if the option does not accept a value.');
+
+        new InputOption('foo', null, InputOption::VALUE_NONE, '', null, ['foo']);
+    }
+
+    public function testCompleteArray()
+    {
+        $values = ['foo', 'bar'];
+        $option = new InputOption('foo', null, InputOption::VALUE_OPTIONAL, '', null, $values);
+        $this->assertTrue($option->hasCompletion());
+        $suggestions = new CompletionSuggestions();
+        $option->complete(new CompletionInput(), $suggestions);
+        $this->assertSame($values, array_map(fn (Suggestion $suggestion) => $suggestion->getValue(), $suggestions->getValueSuggestions()));
+    }
+
+    public function testCompleteClosure()
+    {
+        $values = ['foo', 'bar'];
+        $option = new InputOption('foo', null, InputOption::VALUE_OPTIONAL, '', null, fn (CompletionInput $input): array => $values);
+        $this->assertTrue($option->hasCompletion());
+        $suggestions = new CompletionSuggestions();
+        $option->complete(new CompletionInput(), $suggestions);
+        $this->assertSame($values, array_map(fn (Suggestion $suggestion) => $suggestion->getValue(), $suggestions->getValueSuggestions()));
+    }
+
+    public function testCompleteClosureReturnIncorrectType()
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Closure for option "foo" must return an array. Got "string".');
+
+        $option = new InputOption('foo', null, InputOption::VALUE_OPTIONAL, '', null, fn (CompletionInput $input) => 'invalid');
+        $option->complete(new CompletionInput(), new CompletionSuggestions());
     }
 }

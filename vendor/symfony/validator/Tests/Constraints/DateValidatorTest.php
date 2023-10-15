@@ -13,16 +13,12 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 
 use Symfony\Component\Validator\Constraints\Date;
 use Symfony\Component\Validator\Constraints\DateValidator;
-use Symfony\Component\Validator\Validation;
+use Symfony\Component\Validator\Exception\UnexpectedValueException;
+use Symfony\Component\Validator\Test\ConstraintValidatorTestCase;
 
-class DateValidatorTest extends AbstractConstraintValidatorTest
+class DateValidatorTest extends ConstraintValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): DateValidator
     {
         return new DateValidator();
     }
@@ -41,18 +37,9 @@ class DateValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    public function testDateTimeClassIsValid()
-    {
-        $this->validator->validate(new \DateTime(), new Date());
-
-        $this->assertNoViolation();
-    }
-
-    /**
-     * @expectedException \Symfony\Component\Validator\Exception\UnexpectedTypeException
-     */
     public function testExpectsStringCompatibleType()
     {
+        $this->expectException(UnexpectedValueException::class);
         $this->validator->validate(new \stdClass(), new Date());
     }
 
@@ -66,13 +53,13 @@ class DateValidatorTest extends AbstractConstraintValidatorTest
         $this->assertNoViolation();
     }
 
-    public function getValidDates()
+    public static function getValidDates()
     {
-        return array(
-            array('2010-01-01'),
-            array('1955-12-12'),
-            array('2030-05-31'),
-        );
+        return [
+            ['2010-01-01'],
+            ['1955-12-12'],
+            ['2030-05-31'],
+        ];
     }
 
     /**
@@ -80,9 +67,9 @@ class DateValidatorTest extends AbstractConstraintValidatorTest
      */
     public function testInvalidDates($date, $code)
     {
-        $constraint = new Date(array(
+        $constraint = new Date([
             'message' => 'myMessage',
-        ));
+        ]);
 
         $this->validator->validate($date, $constraint);
 
@@ -92,15 +79,27 @@ class DateValidatorTest extends AbstractConstraintValidatorTest
             ->assertRaised();
     }
 
-    public function getInvalidDates()
+    public function testInvalidDateNamed()
     {
-        return array(
-            array('foobar', Date::INVALID_FORMAT_ERROR),
-            array('foobar 2010-13-01', Date::INVALID_FORMAT_ERROR),
-            array('2010-13-01 foobar', Date::INVALID_FORMAT_ERROR),
-            array('2010-13-01', Date::INVALID_DATE_ERROR),
-            array('2010-04-32', Date::INVALID_DATE_ERROR),
-            array('2010-02-29', Date::INVALID_DATE_ERROR),
-        );
+        $constraint = new Date(message: 'myMessage');
+
+        $this->validator->validate('foobar', $constraint);
+
+        $this->buildViolation('myMessage')
+            ->setParameter('{{ value }}', '"foobar"')
+            ->setCode(Date::INVALID_FORMAT_ERROR)
+            ->assertRaised();
+    }
+
+    public static function getInvalidDates()
+    {
+        return [
+            ['foobar', Date::INVALID_FORMAT_ERROR],
+            ['foobar 2010-13-01', Date::INVALID_FORMAT_ERROR],
+            ['2010-13-01 foobar', Date::INVALID_FORMAT_ERROR],
+            ['2010-13-01', Date::INVALID_DATE_ERROR],
+            ['2010-04-32', Date::INVALID_DATE_ERROR],
+            ['2010-02-29', Date::INVALID_DATE_ERROR],
+        ];
     }
 }

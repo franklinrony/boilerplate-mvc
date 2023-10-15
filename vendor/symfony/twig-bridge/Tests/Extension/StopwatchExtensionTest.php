@@ -13,18 +13,18 @@ namespace Symfony\Bridge\Twig\Tests\Extension;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Bridge\Twig\Extension\StopwatchExtension;
+use Symfony\Component\Stopwatch\Stopwatch;
+use Symfony\Component\Stopwatch\StopwatchEvent;
 use Twig\Environment;
 use Twig\Error\RuntimeError;
 use Twig\Loader\ArrayLoader;
 
 class StopwatchExtensionTest extends TestCase
 {
-    /**
-     * @expectedException \Twig\Error\SyntaxError
-     */
     public function testFailIfStoppingWrongEvent()
     {
-        $this->testTiming('{% stopwatch "foo" %}{% endstopwatch "bar" %}', array());
+        $this->expectException(\Twig\Error\SyntaxError::class);
+        $this->testTiming('{% stopwatch "foo" %}{% endstopwatch "bar" %}', []);
     }
 
     /**
@@ -32,44 +32,65 @@ class StopwatchExtensionTest extends TestCase
      */
     public function testTiming($template, $events)
     {
-        $twig = new Environment(new ArrayLoader(array('template' => $template)), array('debug' => true, 'cache' => false, 'autoescape' => 'html', 'optimizations' => 0));
+        $twig = new Environment(new ArrayLoader(['template' => $template]), ['debug' => true, 'cache' => false, 'autoescape' => 'html', 'optimizations' => 0]);
         $twig->addExtension(new StopwatchExtension($this->getStopwatch($events)));
 
         try {
-            $nodes = $twig->render('template');
+            $twig->render('template');
         } catch (RuntimeError $e) {
             throw $e->getPrevious();
         }
     }
 
-    public function getTimingTemplates()
+    public static function getTimingTemplates()
     {
-        return array(
-            array('{% stopwatch "foo" %}something{% endstopwatch %}', 'foo'),
-            array('{% stopwatch "foo" %}symfony2 is fun{% endstopwatch %}{% stopwatch "bar" %}something{% endstopwatch %}', array('foo', 'bar')),
-            array('{% set foo = "foo" %}{% stopwatch foo %}something{% endstopwatch %}', 'foo'),
-            array('{% set foo = "foo" %}{% stopwatch foo %}something {% set foo = "bar" %}{% endstopwatch %}', 'foo'),
-            array('{% stopwatch "foo.bar" %}something{% endstopwatch %}', 'foo.bar'),
-            array('{% stopwatch "foo" %}something{% endstopwatch %}{% stopwatch "foo" %}something else{% endstopwatch %}', array('foo', 'foo')),
-        );
+        return [
+            ['{% stopwatch "foo" %}something{% endstopwatch %}', 'foo'],
+            ['{% stopwatch "foo" %}symfony is fun{% endstopwatch %}{% stopwatch "bar" %}something{% endstopwatch %}', ['foo', 'bar']],
+            ['{% set foo = "foo" %}{% stopwatch foo %}something{% endstopwatch %}', 'foo'],
+            ['{% set foo = "foo" %}{% stopwatch foo %}something {% set foo = "bar" %}{% endstopwatch %}', 'foo'],
+            ['{% stopwatch "foo.bar" %}something{% endstopwatch %}', 'foo.bar'],
+            ['{% stopwatch "foo" %}something{% endstopwatch %}{% stopwatch "foo" %}something else{% endstopwatch %}', ['foo', 'foo']],
+        ];
     }
 
-    protected function getStopwatch($events = array())
+    protected function getStopwatch($events = [])
     {
-        $events = is_array($events) ? $events : array($events);
-        $stopwatch = $this->getMockBuilder('Symfony\Component\Stopwatch\Stopwatch')->getMock();
+        $events = \is_array($events) ? $events : [$events];
+        $stopwatch = $this->createMock(Stopwatch::class);
 
-        $i = -1;
+        $expectedCalls = 0;
+        $expectedStartCalls = [];
+        $expectedStopCalls = [];
         foreach ($events as $eventName) {
-            $stopwatch->expects($this->at(++$i))
-                ->method('start')
-                ->with($this->equalTo($eventName), 'template')
-            ;
-            $stopwatch->expects($this->at(++$i))
-                ->method('stop')
-                ->with($this->equalTo($eventName))
-            ;
+            ++$expectedCalls;
+            $expectedStartCalls[] = [$this->equalTo($eventName), 'template'];
+            $expectedStopCalls[] = [$this->equalTo($eventName)];
         }
+
+        $stopwatch
+            ->expects($this->exactly($expectedCalls))
+            ->method('start')
+            ->willReturnCallback(function (string $name, string $category) use (&$expectedStartCalls) {
+                [$expectedName, $expectedCategory] = array_shift($expectedStartCalls);
+
+                $expectedName->evaluate($name);
+                $this->assertSame($expectedCategory, $category);
+
+                return $this->createMock(StopwatchEvent::class);
+            })
+        ;
+
+        $stopwatch
+            ->expects($this->exactly($expectedCalls))
+            ->method('stop')
+            ->willReturnCallback(function (string $name) use (&$expectedStopCalls) {
+                [$expectedName] = array_shift($expectedStopCalls);
+                $expectedName->evaluate($name);
+
+                return $this->createMock(StopwatchEvent::class);
+            })
+        ;
 
         return $stopwatch;
     }

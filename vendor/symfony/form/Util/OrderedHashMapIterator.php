@@ -17,65 +17,54 @@ namespace Symfony\Component\Form\Util;
  * @author Bernhard Schussek <bschussek@gmail.com>
  *
  * @internal
+ *
+ * @template-covariant TValue
+ *
+ * @implements \Iterator<string, TValue>
  */
 class OrderedHashMapIterator implements \Iterator
 {
-    /**
-     * @var array
-     */
-    private $elements;
+    /** @var TValue[] */
+    private array $elements;
+    /** @var list<string> */
+    private array $orderedKeys;
+    private int $cursor = 0;
+    private int $cursorId;
+    /** @var array<int, int> */
+    private array $managedCursors;
+    private string|null $key = null;
+    /** @var TValue|null */
+    private mixed $current = null;
 
     /**
-     * @var array
-     */
-    private $orderedKeys;
-
-    /**
-     * @var int
-     */
-    private $cursor;
-
-    /**
-     * @var int
-     */
-    private $cursorId;
-
-    /**
-     * @var array
-     */
-    private $managedCursors;
-
-    /**
-     * @var string|int|null
-     */
-    private $key;
-
-    /**
-     * @var mixed
-     */
-    private $current;
-
-    /**
-     * Creates a new iterator.
-     *
-     * @param array $elements       The elements of the map, indexed by their
-     *                              keys
-     * @param array $orderedKeys    The keys of the map in the order in which
-     *                              they should be iterated
-     * @param array $managedCursors An array from which to reference the
-     *                              iterator's cursor as long as it is alive.
-     *                              This array is managed by the corresponding
-     *                              {@link OrderedHashMap} instance to support
-     *                              recognizing the deletion of elements.
+     * @param TValue[]        $elements       The elements of the map, indexed by their
+     *                                        keys
+     * @param list<string>    $orderedKeys    The keys of the map in the order in which
+     *                                        they should be iterated
+     * @param array<int, int> $managedCursors An array from which to reference the
+     *                                        iterator's cursor as long as it is alive.
+     *                                        This array is managed by the corresponding
+     *                                        {@link OrderedHashMap} instance to support
+     *                                        recognizing the deletion of elements.
      */
     public function __construct(array &$elements, array &$orderedKeys, array &$managedCursors)
     {
         $this->elements = &$elements;
         $this->orderedKeys = &$orderedKeys;
         $this->managedCursors = &$managedCursors;
-        $this->cursorId = count($managedCursors);
+        $this->cursorId = \count($managedCursors);
 
         $this->managedCursors[$this->cursorId] = &$this->cursor;
+    }
+
+    public function __sleep(): array
+    {
+        throw new \BadMethodCallException('Cannot serialize '.__CLASS__);
+    }
+
+    public function __wakeup()
+    {
+        throw new \BadMethodCallException('Cannot unserialize '.__CLASS__);
     }
 
     /**
@@ -84,23 +73,17 @@ class OrderedHashMapIterator implements \Iterator
      */
     public function __destruct()
     {
-        // Use array_splice() instead of isset() to prevent holes in the
+        // Use array_splice() instead of unset() to prevent holes in the
         // array indices, which would break the initialization of $cursorId
         array_splice($this->managedCursors, $this->cursorId, 1);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function current()
+    public function current(): mixed
     {
         return $this->current;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function next()
+    public function next(): void
     {
         ++$this->cursor;
 
@@ -113,32 +96,21 @@ class OrderedHashMapIterator implements \Iterator
         }
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function key()
+    public function key(): mixed
     {
         if (null === $this->key) {
             return null;
         }
 
-        $array = array($this->key => null);
-
-        return key($array);
+        return $this->key;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function valid()
+    public function valid(): bool
     {
         return null !== $this->key;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function rewind()
+    public function rewind(): void
     {
         $this->cursor = 0;
 

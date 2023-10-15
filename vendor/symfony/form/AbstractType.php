@@ -11,8 +11,9 @@
 
 namespace Symfony\Component\Form;
 
+use Symfony\Component\Form\Extension\Core\Type\FormType;
+use Symfony\Component\Form\Util\StringUtil;
 use Symfony\Component\OptionsResolver\OptionsResolver;
-use Symfony\Component\OptionsResolver\OptionsResolverInterface;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
@@ -20,52 +21,46 @@ use Symfony\Component\OptionsResolver\OptionsResolverInterface;
 abstract class AbstractType implements FormTypeInterface
 {
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function buildView(FormView $view, FormInterface $form, array $options)
     {
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
     public function finishView(FormView $view, FormInterface $form, array $options)
     {
     }
 
     /**
-     * {@inheritdoc}
-     */
-    public function setDefaultOptions(OptionsResolverInterface $resolver)
-    {
-        if (!$resolver instanceof OptionsResolver) {
-            throw new \InvalidArgumentException(sprintf('Custom resolver "%s" must extend "Symfony\Component\OptionsResolver\OptionsResolver".', get_class($resolver)));
-        }
-
-        $this->configureOptions($resolver);
-    }
-
-    /**
-     * Configures the options for this type.
-     *
-     * @param OptionsResolver $resolver The resolver for the options
+     * @return void
      */
     public function configureOptions(OptionsResolver $resolver)
     {
     }
 
     /**
-     * {@inheritdoc}
+     * @return string
+     */
+    public function getBlockPrefix()
+    {
+        return StringUtil::fqcnToBlockPrefix(static::class) ?: '';
+    }
+
+    /**
+     * @return string|null
      */
     public function getParent()
     {
-        return 'form';
+        return FormType::class;
     }
 }

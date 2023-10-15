@@ -24,19 +24,22 @@ use Twig\Node\Expression\AbstractExpression;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class CheckToStringNode extends Node
+class CheckToStringNode extends AbstractExpression
 {
     public function __construct(AbstractExpression $expr)
     {
         parent::__construct(['expr' => $expr], [], $expr->getTemplateLine(), $expr->getNodeTag());
     }
 
-    public function compile(Compiler $compiler)
+    public function compile(Compiler $compiler): void
     {
+        $expr = $this->getNode('expr');
         $compiler
             ->raw('$this->sandbox->ensureToStringAllowed(')
-            ->subcompile($this->getNode('expr'))
-            ->raw(')')
+            ->subcompile($expr)
+            ->raw(', ')
+            ->repr($expr->getTemplateLine())
+            ->raw(', $this->source)')
         ;
     }
 }

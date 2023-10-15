@@ -16,17 +16,14 @@
         }
     ],
     "require": {
-        "php": ">=5.3.9",
-        "symfony/security-core": "~2.4"
+        "php": ">=8.1",
+        "symfony/security-core": "^5.4|^6.0"
     },
     "require-dev": {
-        "symfony/http-foundation": "~2.7"
+        "symfony/http-foundation": "^5.4|^6.0"
     },
     "conflict": {
-        "symfony/http-foundation": "<2.7.38|~2.8,<2.8.31"
-    },
-    "suggest": {
-        "symfony/http-foundation": "For using the class SessionTokenStorage."
+        "symfony/http-foundation": "<5.4"
     },
     "autoload": {
         "psr-4": { "Symfony\\Component\\Security\\Csrf\\": "" },
@@ -34,10 +31,5 @@
             "/Tests/"
         ]
     },
-    "minimum-stability": "dev",
-    "extra": {
-        "branch-alias": {
-            "dev-master": "2.7-dev"
-        }
-    }
+    "minimum-stability": "dev"
 }

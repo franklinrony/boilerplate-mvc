@@ -12,139 +12,134 @@
 namespace Symfony\Component\Form\Tests\Extension\Core\DataTransformer;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Form\Exception\TransformationFailedException;
 use Symfony\Component\Form\Extension\Core\DataTransformer\ArrayToPartsTransformer;
 
 class ArrayToPartsTransformerTest extends TestCase
 {
     private $transformer;
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->transformer = new ArrayToPartsTransformer(array(
-            'first' => array('a', 'b', 'c'),
-            'second' => array('d', 'e', 'f'),
-        ));
+        $this->transformer = new ArrayToPartsTransformer([
+            'first' => ['a', 'b', 'c'],
+            'second' => ['d', 'e', 'f'],
+        ]);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->transformer = null;
     }
 
     public function testTransform()
     {
-        $input = array(
+        $input = [
             'a' => '1',
             'b' => '2',
             'c' => '3',
             'd' => '4',
             'e' => '5',
             'f' => '6',
-        );
+        ];
 
-        $output = array(
-            'first' => array(
+        $output = [
+            'first' => [
                 'a' => '1',
                 'b' => '2',
                 'c' => '3',
-            ),
-            'second' => array(
+            ],
+            'second' => [
                 'd' => '4',
                 'e' => '5',
                 'f' => '6',
-            ),
-        );
+            ],
+        ];
 
         $this->assertSame($output, $this->transformer->transform($input));
     }
 
     public function testTransformEmpty()
     {
-        $output = array(
+        $output = [
             'first' => null,
             'second' => null,
-        );
+        ];
 
         $this->assertSame($output, $this->transformer->transform(null));
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testTransformRequiresArray()
     {
+        $this->expectException(TransformationFailedException::class);
         $this->transformer->transform('12345');
     }
 
     public function testReverseTransform()
     {
-        $input = array(
-            'first' => array(
+        $input = [
+            'first' => [
                 'a' => '1',
                 'b' => '2',
                 'c' => '3',
-            ),
-            'second' => array(
+            ],
+            'second' => [
                 'd' => '4',
                 'e' => '5',
                 'f' => '6',
-            ),
-        );
+            ],
+        ];
 
-        $output = array(
+        $output = [
             'a' => '1',
             'b' => '2',
             'c' => '3',
             'd' => '4',
             'e' => '5',
             'f' => '6',
-        );
+        ];
 
         $this->assertSame($output, $this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformCompletelyEmpty()
     {
-        $input = array(
+        $input = [
             'first' => '',
             'second' => '',
-        );
+        ];
 
         $this->assertNull($this->transformer->reverseTransform($input));
     }
 
     public function testReverseTransformCompletelyNull()
     {
-        $input = array(
+        $input = [
             'first' => null,
             'second' => null,
-        );
+        ];
 
         $this->assertNull($this->transformer->reverseTransform($input));
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testReverseTransformPartiallyNull()
     {
-        $input = array(
-            'first' => array(
+        $this->expectException(TransformationFailedException::class);
+        $input = [
+            'first' => [
                 'a' => '1',
                 'b' => '2',
                 'c' => '3',
-            ),
+            ],
             'second' => null,
-        );
+        ];
 
         $this->transformer->reverseTransform($input);
     }
 
-    /**
-     * @expectedException \Symfony\Component\Form\Exception\TransformationFailedException
-     */
     public function testReverseTransformRequiresArray()
     {
+        $this->expectException(TransformationFailedException::class);
         $this->transformer->reverseTransform('12345');
     }
 }

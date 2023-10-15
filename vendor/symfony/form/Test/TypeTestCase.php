@@ -11,8 +11,9 @@
 
 namespace Symfony\Component\Form\Test;
 
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Form\FormBuilder;
-use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\Form\Test\Traits\ValidatorExtensionTrait;
 
 abstract class TypeTestCase extends FormIntegrationTestCase
 {
@@ -22,15 +23,43 @@ abstract class TypeTestCase extends FormIntegrationTestCase
     protected $builder;
 
     /**
-     * @var EventDispatcher
+     * @var EventDispatcherInterface
      */
     protected $dispatcher;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 
-        $this->dispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcherInterface')->getMock();
-        $this->builder = new FormBuilder(null, null, $this->dispatcher, $this->factory);
+        $this->dispatcher = $this->createMock(EventDispatcherInterface::class);
+        $this->builder = new FormBuilder('', null, $this->dispatcher, $this->factory);
+    }
+
+    protected function tearDown(): void
+    {
+        if (\in_array(ValidatorExtensionTrait::class, class_uses($this))) {
+            $this->validator = null;
+        }
+    }
+
+    protected function getExtensions()
+    {
+        $extensions = [];
+
+        if (\in_array(ValidatorExtensionTrait::class, class_uses($this))) {
+            $extensions[] = $this->getValidatorExtension();
+        }
+
+        return $extensions;
+    }
+
+    public static function assertDateTimeEquals(\DateTime $expected, \DateTime $actual)
+    {
+        self::assertEquals($expected->format('c'), $actual->format('c'));
+    }
+
+    public static function assertDateIntervalEquals(\DateInterval $expected, \DateInterval $actual)
+    {
+        self::assertEquals($expected->format('%RP%yY%mM%dDT%hH%iM%sS'), $actual->format('%RP%yY%mM%dDT%hH%iM%sS'));
     }
 }

@@ -11,45 +11,44 @@
 
 namespace Symfony\Bridge\Twig\Extension;
 
-use Symfony\Component\Stopwatch\Stopwatch;
 use Symfony\Bridge\Twig\TokenParser\StopwatchTokenParser;
+use Symfony\Component\Stopwatch\Stopwatch;
 use Twig\Extension\AbstractExtension;
+use Twig\TokenParser\TokenParserInterface;
 
 /**
  * Twig extension for the stopwatch helper.
  *
  * @author Wouter J <wouter@wouterj.nl>
  */
-class StopwatchExtension extends AbstractExtension
+final class StopwatchExtension extends AbstractExtension
 {
-    private $stopwatch;
-    private $enabled;
+    private ?Stopwatch $stopwatch;
+    private bool $enabled;
 
-    public function __construct(Stopwatch $stopwatch = null, $enabled = true)
+    public function __construct(Stopwatch $stopwatch = null, bool $enabled = true)
     {
         $this->stopwatch = $stopwatch;
         $this->enabled = $enabled;
     }
 
-    public function getStopwatch()
+    public function getStopwatch(): Stopwatch
     {
         return $this->stopwatch;
     }
 
-    public function getTokenParsers()
+    /**
+     * @return TokenParserInterface[]
+     */
+    public function getTokenParsers(): array
     {
-        return array(
+        return [
             /*
              * {% stopwatch foo %}
              * Some stuff which will be recorded on the timeline
              * {% endstopwatch %}
              */
             new StopwatchTokenParser(null !== $this->stopwatch && $this->enabled),
-        );
-    }
-
-    public function getName()
-    {
-        return 'stopwatch';
+        ];
     }
 }

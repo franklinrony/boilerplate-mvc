@@ -19,7 +19,7 @@ use Symfony\Component\Security\Csrf\TokenGenerator\UriSafeTokenGenerator;
  */
 class UriSafeTokenGeneratorTest extends TestCase
 {
-    const ENTROPY = 1000;
+    private const ENTROPY = 1000;
 
     /**
      * A non alpha-numeric byte string.
@@ -29,44 +29,56 @@ class UriSafeTokenGeneratorTest extends TestCase
     private static $bytes;
 
     /**
-     * @var \PHPUnit_Framework_MockObject_MockObject
-     */
-    private $random;
-
-    /**
      * @var UriSafeTokenGenerator
      */
     private $generator;
 
-    public static function setUpBeforeClass()
+    public static function setUpBeforeClass(): void
     {
         self::$bytes = base64_decode('aMf+Tct/RLn2WQ==');
     }
 
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->random = $this->getMockBuilder('Symfony\Component\Security\Core\Util\SecureRandomInterface')->getMock();
-        $this->generator = new UriSafeTokenGenerator($this->random, self::ENTROPY);
+        $this->generator = new UriSafeTokenGenerator(self::ENTROPY);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
-        $this->random = null;
         $this->generator = null;
     }
 
     public function testGenerateToken()
     {
-        $this->random->expects($this->once())
-            ->method('nextBytes')
-            ->with(self::ENTROPY / 8)
-            ->will($this->returnValue(self::$bytes));
-
         $token = $this->generator->generateToken();
 
         $this->assertTrue(ctype_print($token), 'is printable');
         $this->assertStringNotMatchesFormat('%S+%S', $token, 'is URI safe');
         $this->assertStringNotMatchesFormat('%S/%S', $token, 'is URI safe');
         $this->assertStringNotMatchesFormat('%S=%S', $token, 'is URI safe');
+    }
+
+    /**
+     * @dataProvider validDataProvider
+     */
+    public function testValidLength(int $entropy, int $length)
+    {
+        $generator = new UriSafeTokenGenerator($entropy);
+        $token = $generator->generateToken();
+        $this->assertSame($length, \strlen($token));
+    }
+
+    public static function validDataProvider(): \Iterator
+    {
+        yield [24, 4];
+        yield 'Float length' => [20, 3];
+    }
+
+    public function testInvalidLength()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Entropy should be greater than 7.');
+
+        new UriSafeTokenGenerator(7);
     }
 }

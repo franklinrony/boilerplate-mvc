@@ -15,12 +15,8 @@ use Symfony\Component\Form\AbstractType;
 
 class FooType extends AbstractType
 {
-    public function getName()
+    public function getParent(): ?string
     {
-        return 'foo';
-    }
-
-    public function getParent()
-    {
+        return null;
     }
 }

@@ -12,191 +12,136 @@
 namespace Symfony\Component\Form\Tests\Extension\DataCollector;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\Form\CallbackTransformer;
 use Symfony\Component\Form\Exception\TransformationFailedException;
+use Symfony\Component\Form\Extension\Core\DataMapper\DataMapper;
+use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\DataCollector\FormDataExtractor;
 use Symfony\Component\Form\FormBuilder;
 use Symfony\Component\Form\FormError;
+use Symfony\Component\Form\FormFactory;
+use Symfony\Component\Form\FormRegistry;
 use Symfony\Component\Form\FormView;
+use Symfony\Component\Form\ResolvedFormType;
+use Symfony\Component\Form\ResolvedFormTypeFactory;
 use Symfony\Component\Form\Tests\Fixtures\FixedDataTransformer;
-use Symfony\Component\HttpKernel\DataCollector\Util\ValueExporter;
-
-class FormDataExtractorTest_SimpleValueExporter extends ValueExporter
-{
-    /**
-     * {@inheritdoc}
-     */
-    public function exportValue($value, $depth = 1, $deep = false)
-    {
-        return is_object($value) ? sprintf('object(%s)', get_class($value)) : var_export($value, true);
-    }
-}
+use Symfony\Component\Validator\ConstraintViolation;
+use Symfony\Component\VarDumper\Test\VarDumperTestTrait;
 
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
 class FormDataExtractorTest extends TestCase
 {
-    /**
-     * @var FormDataExtractorTest_SimpleValueExporter
-     */
-    private $valueExporter;
+    use VarDumperTestTrait;
 
     /**
      * @var FormDataExtractor
      */
     private $dataExtractor;
 
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject
-     */
-    private $dispatcher;
-
-    /**
-     * @var \PHPUnit_Framework_MockObject_MockObject
-     */
-    private $factory;
-
-    protected function setUp()
+    protected function setUp(): void
     {
-        $this->valueExporter = new FormDataExtractorTest_SimpleValueExporter();
-        $this->dataExtractor = new FormDataExtractor($this->valueExporter);
-        $this->dispatcher = $this->getMockBuilder('Symfony\Component\EventDispatcher\EventDispatcherInterface')->getMock();
-        $this->factory = $this->getMockBuilder('Symfony\Component\Form\FormFactoryInterface')->getMock();
+        $this->dataExtractor = new FormDataExtractor();
     }
 
     public function testExtractConfiguration()
     {
-        $type = $this->getMockBuilder('Symfony\Component\Form\ResolvedFormTypeInterface')->getMock();
-        $type->expects($this->any())
-            ->method('getName')
-            ->will($this->returnValue('type_name'));
-        $type->expects($this->any())
-            ->method('getInnerType')
-            ->will($this->returnValue(new \stdClass()));
-
         $form = $this->createBuilder('name')
-            ->setType($type)
+            ->setType(new ResolvedFormType(new HiddenType()))
             ->getForm();
 
-        $this->assertSame(array(
+        $this->assertSame([
             'id' => 'name',
             'name' => 'name',
-            'type' => 'type_name',
-            'type_class' => 'stdClass',
-            'synchronized' => 'true',
-            'passed_options' => array(),
-            'resolved_options' => array(),
-        ), $this->dataExtractor->extractConfiguration($form));
+            'type_class' => HiddenType::class,
+            'synchronized' => true,
+            'passed_options' => [],
+            'resolved_options' => [],
+        ], $this->dataExtractor->extractConfiguration($form));
     }
 
     public function testExtractConfigurationSortsPassedOptions()
     {
-        $type = $this->getMockBuilder('Symfony\Component\Form\ResolvedFormTypeInterface')->getMock();
-        $type->expects($this->any())
-            ->method('getName')
-            ->will($this->returnValue('type_name'));
-        $type->expects($this->any())
-            ->method('getInnerType')
-            ->will($this->returnValue(new \stdClass()));
-
-        $options = array(
+        $options = [
             'b' => 'foo',
             'a' => 'bar',
             'c' => 'baz',
-        );
+        ];
 
         $form = $this->createBuilder('name')
-            ->setType($type)
+            ->setType(new ResolvedFormType(new HiddenType()))
             // passed options are stored in an attribute by
             // ResolvedTypeDataCollectorProxy
             ->setAttribute('data_collector/passed_options', $options)
             ->getForm();
 
-        $this->assertSame(array(
+        $this->assertSame([
             'id' => 'name',
             'name' => 'name',
-            'type' => 'type_name',
-            'type_class' => 'stdClass',
-            'synchronized' => 'true',
-            'passed_options' => array(
-                'a' => "'bar'",
-                'b' => "'foo'",
-                'c' => "'baz'",
-            ),
-            'resolved_options' => array(),
-        ), $this->dataExtractor->extractConfiguration($form));
+            'type_class' => HiddenType::class,
+            'synchronized' => true,
+            'passed_options' => [
+                'a' => 'bar',
+                'b' => 'foo',
+                'c' => 'baz',
+            ],
+            'resolved_options' => [],
+        ], $this->dataExtractor->extractConfiguration($form));
     }
 
     public function testExtractConfigurationSortsResolvedOptions()
     {
-        $type = $this->getMockBuilder('Symfony\Component\Form\ResolvedFormTypeInterface')->getMock();
-        $type->expects($this->any())
-            ->method('getName')
-            ->will($this->returnValue('type_name'));
-        $type->expects($this->any())
-            ->method('getInnerType')
-            ->will($this->returnValue(new \stdClass()));
-
-        $options = array(
+        $options = [
             'b' => 'foo',
             'a' => 'bar',
             'c' => 'baz',
-        );
+        ];
 
         $form = $this->createBuilder('name', $options)
-            ->setType($type)
+            ->setType(new ResolvedFormType(new HiddenType()))
             ->getForm();
 
-        $this->assertSame(array(
+        $this->assertSame([
             'id' => 'name',
             'name' => 'name',
-            'type' => 'type_name',
-            'type_class' => 'stdClass',
-            'synchronized' => 'true',
-            'passed_options' => array(),
-            'resolved_options' => array(
-                'a' => "'bar'",
-                'b' => "'foo'",
-                'c' => "'baz'",
-            ),
-        ), $this->dataExtractor->extractConfiguration($form));
+            'type_class' => HiddenType::class,
+            'synchronized' => true,
+            'passed_options' => [],
+            'resolved_options' => [
+                'a' => 'bar',
+                'b' => 'foo',
+                'c' => 'baz',
+            ],
+        ], $this->dataExtractor->extractConfiguration($form));
     }
 
     public function testExtractConfigurationBuildsIdRecursively()
     {
-        $type = $this->getMockBuilder('Symfony\Component\Form\ResolvedFormTypeInterface')->getMock();
-        $type->expects($this->any())
-            ->method('getName')
-            ->will($this->returnValue('type_name'));
-        $type->expects($this->any())
-            ->method('getInnerType')
-            ->will($this->returnValue(new \stdClass()));
-
         $grandParent = $this->createBuilder('grandParent')
             ->setCompound(true)
-            ->setDataMapper($this->getMockBuilder('Symfony\Component\Form\DataMapperInterface')->getMock())
+            ->setDataMapper(new DataMapper())
             ->getForm();
         $parent = $this->createBuilder('parent')
             ->setCompound(true)
-            ->setDataMapper($this->getMockBuilder('Symfony\Component\Form\DataMapperInterface')->getMock())
+            ->setDataMapper(new DataMapper())
             ->getForm();
         $form = $this->createBuilder('name')
-            ->setType($type)
+            ->setType(new ResolvedFormType(new HiddenType()))
             ->getForm();
 
         $grandParent->add($parent);
         $parent->add($form);
 
-        $this->assertSame(array(
+        $this->assertSame([
             'id' => 'grandParent_parent_name',
             'name' => 'name',
-            'type' => 'type_name',
-            'type_class' => 'stdClass',
-            'synchronized' => 'true',
-            'passed_options' => array(),
-            'resolved_options' => array(),
-        ), $this->dataExtractor->extractConfiguration($form));
+            'type_class' => HiddenType::class,
+            'synchronized' => true,
+            'passed_options' => [],
+            'resolved_options' => [],
+        ], $this->dataExtractor->extractConfiguration($form));
     }
 
     public function testExtractDefaultData()
@@ -205,50 +150,50 @@ class FormDataExtractorTest extends TestCase
 
         $form->setData('Foobar');
 
-        $this->assertSame(array(
-            'default_data' => array(
-                'norm' => "'Foobar'",
-            ),
-            'submitted_data' => array(),
-        ), $this->dataExtractor->extractDefaultData($form));
+        $this->assertSame([
+            'default_data' => [
+                'norm' => 'Foobar',
+            ],
+            'submitted_data' => [],
+        ], $this->dataExtractor->extractDefaultData($form));
     }
 
     public function testExtractDefaultDataStoresModelDataIfDifferent()
     {
         $form = $this->createBuilder('name')
-            ->addModelTransformer(new FixedDataTransformer(array(
+            ->addModelTransformer(new FixedDataTransformer([
                 'Foo' => 'Bar',
-            )))
+            ]))
             ->getForm();
 
         $form->setData('Foo');
 
-        $this->assertSame(array(
-            'default_data' => array(
-                'norm' => "'Bar'",
-                'model' => "'Foo'",
-            ),
-            'submitted_data' => array(),
-        ), $this->dataExtractor->extractDefaultData($form));
+        $this->assertSame([
+            'default_data' => [
+                'norm' => 'Bar',
+                'model' => 'Foo',
+            ],
+            'submitted_data' => [],
+        ], $this->dataExtractor->extractDefaultData($form));
     }
 
     public function testExtractDefaultDataStoresViewDataIfDifferent()
     {
         $form = $this->createBuilder('name')
-            ->addViewTransformer(new FixedDataTransformer(array(
+            ->addViewTransformer(new FixedDataTransformer([
                 'Foo' => 'Bar',
-            )))
+            ]))
             ->getForm();
 
         $form->setData('Foo');
 
-        $this->assertSame(array(
-            'default_data' => array(
-                'norm' => "'Foo'",
-                'view' => "'Bar'",
-            ),
-            'submitted_data' => array(),
-        ), $this->dataExtractor->extractDefaultData($form));
+        $this->assertSame([
+            'default_data' => [
+                'norm' => 'Foo',
+                'view' => 'Bar',
+            ],
+            'submitted_data' => [],
+        ], $this->dataExtractor->extractDefaultData($form));
     }
 
     public function testExtractSubmittedData()
@@ -257,55 +202,55 @@ class FormDataExtractorTest extends TestCase
 
         $form->submit('Foobar');
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foobar'",
-            ),
-            'errors' => array(),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Foobar',
+            ],
+            'errors' => [],
+            'synchronized' => true,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractSubmittedDataStoresModelDataIfDifferent()
     {
         $form = $this->createBuilder('name')
-            ->addModelTransformer(new FixedDataTransformer(array(
+            ->addModelTransformer(new FixedDataTransformer([
                 'Foo' => 'Bar',
                 '' => '',
-            )))
+            ]))
             ->getForm();
 
         $form->submit('Bar');
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Bar'",
-                'model' => "'Foo'",
-            ),
-            'errors' => array(),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Bar',
+                'model' => 'Foo',
+            ],
+            'errors' => [],
+            'synchronized' => true,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractSubmittedDataStoresViewDataIfDifferent()
     {
         $form = $this->createBuilder('name')
-            ->addViewTransformer(new FixedDataTransformer(array(
+            ->addViewTransformer(new FixedDataTransformer([
                 'Foo' => 'Bar',
                 '' => '',
-            )))
+            ]))
             ->getForm();
 
         $form->submit('Bar');
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foo'",
-                'view' => "'Bar'",
-            ),
-            'errors' => array(),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Foo',
+                'view' => 'Bar',
+            ],
+            'errors' => [],
+            'synchronized' => true,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractSubmittedDataStoresErrors()
@@ -315,15 +260,15 @@ class FormDataExtractorTest extends TestCase
         $form->submit('Foobar');
         $form->addError(new FormError('Invalid!'));
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foobar'",
-            ),
-            'errors' => array(
-                array('message' => 'Invalid!', 'origin' => spl_object_hash($form), 'trace' => array()),
-            ),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Foobar',
+            ],
+            'errors' => [
+                ['message' => 'Invalid!', 'origin' => spl_object_hash($form), 'trace' => []],
+            ],
+            'synchronized' => true,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractSubmittedDataStoresErrorOrigin()
@@ -336,15 +281,15 @@ class FormDataExtractorTest extends TestCase
         $form->submit('Foobar');
         $form->addError($error);
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foobar'",
-            ),
-            'errors' => array(
-                array('message' => 'Invalid!', 'origin' => spl_object_hash($form), 'trace' => array()),
-            ),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Foobar',
+            ],
+            'errors' => [
+                ['message' => 'Invalid!', 'origin' => spl_object_hash($form), 'trace' => []],
+            ],
+            'synchronized' => true,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractSubmittedDataStoresErrorCause()
@@ -352,24 +297,44 @@ class FormDataExtractorTest extends TestCase
         $form = $this->createBuilder('name')->getForm();
 
         $exception = new \Exception();
+        $violation = new ConstraintViolation('Foo', 'Foo', [], 'Root', 'property.path', 'Invalid!', null, null, null, $exception);
 
         $form->submit('Foobar');
-        $form->addError(new FormError('Invalid!', null, array(), null, $exception));
+        $form->addError(new FormError('Invalid!', null, [], null, $violation));
+        $origin = spl_object_hash($form);
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foobar'",
-            ),
-            'errors' => array(
-                array('message' => 'Invalid!', 'origin' => spl_object_hash($form), 'trace' => array(
-                    array(
-                        'class' => "'Exception'",
-                        'message' => "''",
-                    ),
-                )),
-            ),
-            'synchronized' => 'true',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertDumpMatchesFormat(<<<EODUMP
+array:3 [
+  "submitted_data" => array:1 [
+    "norm" => "Foobar"
+  ]
+  "errors" => array:1 [
+    0 => array:3 [
+      "message" => "Invalid!"
+      "origin" => "$origin"
+      "trace" => array:2 [
+        0 => Symfony\Component\Validator\ConstraintViolation {
+          -message: "Foo"
+          -messageTemplate: "Foo"
+          -parameters: []
+          -plural: null
+          -root: "Root"
+          -propertyPath: "property.path"
+          -invalidValue: "Invalid!"
+          -constraint: null
+          -code: null
+          -cause: Exception {%A}
+        }
+        1 => Exception {#1}
+      ]
+    ]
+  ]
+  "synchronized" => true
+]
+EODUMP
+            ,
+            $this->dataExtractor->extractSubmittedData($form)
+        );
     }
 
     public function testExtractSubmittedDataRemembersIfNonSynchronized()
@@ -385,49 +350,43 @@ class FormDataExtractorTest extends TestCase
 
         $form->submit('Foobar');
 
-        $this->assertSame(array(
-            'submitted_data' => array(
-                'norm' => "'Foobar'",
-                'model' => 'NULL',
-            ),
-            'errors' => array(),
-            'synchronized' => 'false',
-        ), $this->dataExtractor->extractSubmittedData($form));
+        $this->assertSame([
+            'submitted_data' => [
+                'norm' => 'Foobar',
+                'model' => null,
+            ],
+            'errors' => [],
+            'synchronized' => false,
+        ], $this->dataExtractor->extractSubmittedData($form));
     }
 
     public function testExtractViewVariables()
     {
         $view = new FormView();
 
-        $view->vars = array(
+        $view->vars = [
             'b' => 'foo',
             'a' => 'bar',
             'c' => 'baz',
             'id' => 'foo_bar',
             'name' => 'bar',
-        );
+        ];
 
-        $this->assertSame(array(
+        $this->assertSame([
             'id' => 'foo_bar',
             'name' => 'bar',
-            'view_vars' => array(
-                'a' => "'bar'",
-                'b' => "'foo'",
-                'c' => "'baz'",
-                'id' => "'foo_bar'",
-                'name' => "'bar'",
-            ),
-        ), $this->dataExtractor->extractViewVariables($view));
+            'view_vars' => [
+                'a' => 'bar',
+                'b' => 'foo',
+                'c' => 'baz',
+                'id' => 'foo_bar',
+                'name' => 'bar',
+            ],
+        ], $this->dataExtractor->extractViewVariables($view));
     }
 
-    /**
-     * @param string $name
-     * @param array  $options
-     *
-     * @return FormBuilder
-     */
-    private function createBuilder($name, array $options = array())
+    private function createBuilder(string $name, array $options = []): FormBuilder
     {
-        return new FormBuilder($name, null, $this->dispatcher, $this->factory, $options);
+        return new FormBuilder($name, null, new EventDispatcher(), new FormFactory(new FormRegistry([], new ResolvedFormTypeFactory())), $options);
     }
 }

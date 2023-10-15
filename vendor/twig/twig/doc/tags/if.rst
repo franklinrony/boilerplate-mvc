@@ -6,7 +6,7 @@ The ``if`` statement in Twig is comparable with the if statements of PHP.
 In the simplest form you can use it to test if an expression evaluates to
 ``true``:
 
-.. code-block:: jinja
+.. code-block:: html+twig
 
     {% if online == false %}
         <p>Our website is in maintenance mode. Please, come back later.</p>
@@ -14,7 +14,7 @@ In the simplest form you can use it to test if an expression evaluates to
 
 You can also test if an array is not empty:
 
-.. code-block:: jinja
+.. code-block:: html+twig
 
     {% if users %}
         <ul>
@@ -26,12 +26,11 @@ You can also test if an array is not empty:
 
 .. note::
 
-    If you want to test if the variable is defined, use ``if users is
-    defined`` instead.
+    If you want to test if the variable is defined, use ``if users is defined`` instead.
 
 You can also use ``not`` to check for values that evaluate to ``false``:
 
-.. code-block:: jinja
+.. code-block:: html+twig
 
     {% if not user.subscribed %}
         <p>You are not subscribed to our mailing list.</p>
@@ -39,7 +38,7 @@ You can also use ``not`` to check for values that evaluate to ``false``:
 
 For multiple conditions, ``and`` and ``or`` can be used:
 
-.. code-block:: jinja
+.. code-block:: html+twig
 
     {% if temperature > 18 and temperature < 27 %}
         <p>It's a nice day for a walk in the park.</p>
@@ -48,7 +47,7 @@ For multiple conditions, ``and`` and ``or`` can be used:
 For multiple branches ``elseif`` and ``else`` can be used like in PHP. You can
 use more complex ``expressions`` there too:
 
-.. code-block:: jinja
+.. code-block:: twig
 
     {% if product.stock > 10 %}
        Available

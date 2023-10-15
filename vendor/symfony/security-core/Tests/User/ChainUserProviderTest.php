@@ -13,172 +13,265 @@ namespace Symfony\Component\Security\Core\Tests\User;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Security\Core\Exception\UnsupportedUserException;
-use Symfony\Component\Security\Core\Exception\UsernameNotFoundException;
+use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\User\ChainUserProvider;
+use Symfony\Component\Security\Core\User\InMemoryUser;
+use Symfony\Component\Security\Core\User\InMemoryUserProvider;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\PasswordUpgraderInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 class ChainUserProviderTest extends TestCase
 {
-    public function testLoadUserByUsername()
+    public function testLoadUserByIdentifier()
     {
-        $provider1 = $this->getProvider();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
         $provider1
             ->expects($this->once())
-            ->method('loadUserByUsername')
+            ->method('loadUserByIdentifier')
             ->with($this->equalTo('foo'))
-            ->will($this->throwException(new UsernameNotFoundException('not found')))
+            ->willThrowException(new UserNotFoundException('not found'))
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
         $provider2
             ->expects($this->once())
-            ->method('loadUserByUsername')
+            ->method('loadUserByIdentifier')
             ->with($this->equalTo('foo'))
-            ->will($this->returnValue($account = $this->getAccount()))
+            ->willReturn($account = $this->createMock(UserInterface::class))
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
-        $this->assertSame($account, $provider->loadUserByUsername('foo'));
+        $provider = new ChainUserProvider([$provider1, $provider2]);
+        $this->assertSame($account, $provider->loadUserByIdentifier('foo'));
     }
 
-    /**
-     * @expectedException \Symfony\Component\Security\Core\Exception\UsernameNotFoundException
-     */
-    public function testLoadUserByUsernameThrowsUsernameNotFoundException()
+    public function testLoadUserByIdentifierThrowsUserNotFoundException()
     {
-        $provider1 = $this->getProvider();
+        $this->expectException(UserNotFoundException::class);
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
         $provider1
             ->expects($this->once())
-            ->method('loadUserByUsername')
+            ->method('loadUserByIdentifier')
             ->with($this->equalTo('foo'))
-            ->will($this->throwException(new UsernameNotFoundException('not found')))
+            ->willThrowException(new UserNotFoundException('not found'))
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
         $provider2
             ->expects($this->once())
-            ->method('loadUserByUsername')
+            ->method('loadUserByIdentifier')
             ->with($this->equalTo('foo'))
-            ->will($this->throwException(new UsernameNotFoundException('not found')))
+            ->willThrowException(new UserNotFoundException('not found'))
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
-        $provider->loadUserByUsername('foo');
+        $provider = new ChainUserProvider([$provider1, $provider2]);
+        $provider->loadUserByIdentifier('foo');
     }
 
     public function testRefreshUser()
     {
-        $provider1 = $this->getProvider();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
         $provider1
             ->expects($this->once())
-            ->method('refreshUser')
-            ->will($this->throwException(new UnsupportedUserException('unsupported')))
+            ->method('supportsClass')
+            ->willReturn(false)
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
+        $provider2
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
         $provider2
             ->expects($this->once())
             ->method('refreshUser')
-            ->will($this->returnValue($account = $this->getAccount()))
+            ->willThrowException(new UnsupportedUserException('unsupported'))
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
-        $this->assertSame($account, $provider->refreshUser($this->getAccount()));
+        $provider3 = $this->createMock(InMemoryUserProvider::class);
+        $provider3
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
+        $provider3
+            ->expects($this->once())
+            ->method('refreshUser')
+            ->willReturn($account = $this->createMock(UserInterface::class))
+        ;
+
+        $provider = new ChainUserProvider([$provider1, $provider2, $provider3]);
+        $this->assertSame($account, $provider->refreshUser($this->createMock(UserInterface::class)));
     }
 
     public function testRefreshUserAgain()
     {
-        $provider1 = $this->getProvider();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
+        $provider1
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
         $provider1
             ->expects($this->once())
             ->method('refreshUser')
-            ->will($this->throwException(new UsernameNotFoundException('not found')))
+            ->willThrowException(new UserNotFoundException('not found'))
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
+        $provider2
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
         $provider2
             ->expects($this->once())
             ->method('refreshUser')
-            ->will($this->returnValue($account = $this->getAccount()))
+            ->willReturn($account = $this->createMock(UserInterface::class))
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
-        $this->assertSame($account, $provider->refreshUser($this->getAccount()));
+        $provider = new ChainUserProvider([$provider1, $provider2]);
+        $this->assertSame($account, $provider->refreshUser($this->createMock(UserInterface::class)));
     }
 
-    /**
-     * @expectedException \Symfony\Component\Security\Core\Exception\UnsupportedUserException
-     */
     public function testRefreshUserThrowsUnsupportedUserException()
     {
-        $provider1 = $this->getProvider();
+        $this->expectException(UnsupportedUserException::class);
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
+        $provider1
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
         $provider1
             ->expects($this->once())
             ->method('refreshUser')
-            ->will($this->throwException(new UnsupportedUserException('unsupported')))
+            ->willThrowException(new UnsupportedUserException('unsupported'))
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
+        $provider2
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
         $provider2
             ->expects($this->once())
             ->method('refreshUser')
-            ->will($this->throwException(new UnsupportedUserException('unsupported')))
+            ->willThrowException(new UnsupportedUserException('unsupported'))
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
-        $provider->refreshUser($this->getAccount());
+        $provider = new ChainUserProvider([$provider1, $provider2]);
+        $provider->refreshUser($this->createMock(UserInterface::class));
     }
 
     public function testSupportsClass()
     {
-        $provider1 = $this->getProvider();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
         $provider1
             ->expects($this->once())
             ->method('supportsClass')
             ->with($this->equalTo('foo'))
-            ->will($this->returnValue(false))
+            ->willReturn(false)
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
         $provider2
             ->expects($this->once())
             ->method('supportsClass')
             ->with($this->equalTo('foo'))
-            ->will($this->returnValue(true))
+            ->willReturn(true)
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
+        $provider = new ChainUserProvider([$provider1, $provider2]);
         $this->assertTrue($provider->supportsClass('foo'));
     }
 
     public function testSupportsClassWhenNotSupported()
     {
-        $provider1 = $this->getProvider();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
         $provider1
             ->expects($this->once())
             ->method('supportsClass')
             ->with($this->equalTo('foo'))
-            ->will($this->returnValue(false))
+            ->willReturn(false)
         ;
 
-        $provider2 = $this->getProvider();
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
         $provider2
             ->expects($this->once())
             ->method('supportsClass')
             ->with($this->equalTo('foo'))
-            ->will($this->returnValue(false))
+            ->willReturn(false)
         ;
 
-        $provider = new ChainUserProvider(array($provider1, $provider2));
+        $provider = new ChainUserProvider([$provider1, $provider2]);
         $this->assertFalse($provider->supportsClass('foo'));
     }
 
-    protected function getAccount()
+    public function testAcceptsTraversable()
     {
-        return $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
+        $provider1 = $this->createMock(InMemoryUserProvider::class);
+        $provider1
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
+        $provider1
+            ->expects($this->once())
+            ->method('refreshUser')
+            ->willThrowException(new UnsupportedUserException('unsupported'))
+        ;
+
+        $provider2 = $this->createMock(InMemoryUserProvider::class);
+        $provider2
+            ->expects($this->once())
+            ->method('supportsClass')
+            ->willReturn(true)
+        ;
+
+        $provider2
+            ->expects($this->once())
+            ->method('refreshUser')
+            ->willReturn($account = $this->createMock(UserInterface::class))
+        ;
+
+        $provider = new ChainUserProvider(new \ArrayObject([$provider1, $provider2]));
+        $this->assertSame($account, $provider->refreshUser($this->createMock(UserInterface::class)));
     }
 
-    protected function getProvider()
+    public function testPasswordUpgrades()
     {
-        return $this->getMockBuilder('Symfony\Component\Security\Core\User\UserProviderInterface')->getMock();
+        $user = new InMemoryUser('user', 'pwd');
+
+        $provider1 = $this->getMockForAbstractClass(MigratingProvider::class);
+        $provider1
+            ->expects($this->once())
+            ->method('upgradePassword')
+            ->willThrowException(new UnsupportedUserException('unsupported'))
+        ;
+
+        $provider2 = $this->getMockForAbstractClass(MigratingProvider::class);
+        $provider2
+            ->expects($this->once())
+            ->method('upgradePassword')
+            ->with($user, 'foobar')
+        ;
+
+        $provider = new ChainUserProvider([$provider1, $provider2]);
+        $provider->upgradePassword($user, 'foobar');
     }
+}
+
+abstract class MigratingProvider implements PasswordUpgraderInterface
+{
+    abstract public function upgradePassword(PasswordAuthenticatedUserInterface $user, string $newHashedPassword): void;
 }

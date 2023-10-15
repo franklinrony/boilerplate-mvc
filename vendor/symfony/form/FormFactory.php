@@ -11,71 +11,45 @@
 
 namespace Symfony\Component\Form;
 
-use Symfony\Component\Form\Exception\UnexpectedTypeException;
+use Symfony\Component\Form\Extension\Core\Type\FormType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 
 class FormFactory implements FormFactoryInterface
 {
-    private $registry;
-    private $resolvedTypeFactory;
+    private FormRegistryInterface $registry;
 
-    public function __construct(FormRegistryInterface $registry, ResolvedFormTypeFactoryInterface $resolvedTypeFactory)
+    public function __construct(FormRegistryInterface $registry)
     {
         $this->registry = $registry;
-        $this->resolvedTypeFactory = $resolvedTypeFactory;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function create($type = 'form', $data = null, array $options = array())
+    public function create(string $type = FormType::class, mixed $data = null, array $options = []): FormInterface
     {
         return $this->createBuilder($type, $data, $options)->getForm();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createNamed($name, $type = 'form', $data = null, array $options = array())
+    public function createNamed(string $name, string $type = FormType::class, mixed $data = null, array $options = []): FormInterface
     {
         return $this->createNamedBuilder($name, $type, $data, $options)->getForm();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createForProperty($class, $property, $data = null, array $options = array())
+    public function createForProperty(string $class, string $property, mixed $data = null, array $options = []): FormInterface
     {
         return $this->createBuilderForProperty($class, $property, $data, $options)->getForm();
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createBuilder($type = 'form', $data = null, array $options = array())
+    public function createBuilder(string $type = FormType::class, mixed $data = null, array $options = []): FormBuilderInterface
     {
-        $name = $type instanceof FormTypeInterface || $type instanceof ResolvedFormTypeInterface
-            ? $type->getName()
-            : $type;
-
-        return $this->createNamedBuilder($name, $type, $data, $options);
+        return $this->createNamedBuilder($this->registry->getType($type)->getBlockPrefix(), $type, $data, $options);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createNamedBuilder($name, $type = 'form', $data = null, array $options = array())
+    public function createNamedBuilder(string $name, string $type = FormType::class, mixed $data = null, array $options = []): FormBuilderInterface
     {
-        if (null !== $data && !array_key_exists('data', $options)) {
+        if (null !== $data && !\array_key_exists('data', $options)) {
             $options['data'] = $data;
         }
 
-        if ($type instanceof FormTypeInterface) {
-            $type = $this->resolveType($type);
-        } elseif (is_string($type)) {
-            $type = $this->registry->getType($type);
-        } elseif (!$type instanceof ResolvedFormTypeInterface) {
-            throw new UnexpectedTypeException($type, 'string, Symfony\Component\Form\ResolvedFormTypeInterface or Symfony\Component\Form\FormTypeInterface');
-        }
+        $type = $this->registry->getType($type);
 
         $builder = $type->createBuilder($this, $name, $options);
 
@@ -86,13 +60,10 @@ class FormFactory implements FormFactoryInterface
         return $builder;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function createBuilderForProperty($class, $property, $data = null, array $options = array())
+    public function createBuilderForProperty(string $class, string $property, mixed $data = null, array $options = []): FormBuilderInterface
     {
         if (null === $guesser = $this->registry->getTypeGuesser()) {
-            return $this->createNamedBuilder($property, 'text', $data, $options);
+            return $this->createNamedBuilder($property, TextType::class, $data, $options);
         }
 
         $typeGuess = $guesser->guessType($class, $property);
@@ -100,60 +71,34 @@ class FormFactory implements FormFactoryInterface
         $requiredGuess = $guesser->guessRequired($class, $property);
         $patternGuess = $guesser->guessPattern($class, $property);
 
-        $type = $typeGuess ? $typeGuess->getType() : 'text';
+        $type = $typeGuess ? $typeGuess->getType() : TextType::class;
 
-        $maxLength = $maxLengthGuess ? $maxLengthGuess->getValue() : null;
-        $pattern = $patternGuess ? $patternGuess->getValue() : null;
+        $maxLength = $maxLengthGuess?->getValue();
+        $pattern = $patternGuess?->getValue();
 
         if (null !== $pattern) {
-            $options = array_replace_recursive(array('attr' => array('pattern' => $pattern)), $options);
+            $options = array_replace_recursive(['attr' => ['pattern' => $pattern]], $options);
         }
 
         if (null !== $maxLength) {
-            $options = array_replace_recursive(array('attr' => array('maxlength' => $maxLength)), $options);
+            $options = array_replace_recursive(['attr' => ['maxlength' => $maxLength]], $options);
         }
 
         if ($requiredGuess) {
-            $options = array_merge(array('required' => $requiredGuess->getValue()), $options);
+            $options = array_merge(['required' => $requiredGuess->getValue()], $options);
         }
 
         // user options may override guessed options
         if ($typeGuess) {
-            $attrs = array();
+            $attrs = [];
             $typeGuessOptions = $typeGuess->getOptions();
             if (isset($typeGuessOptions['attr']) && isset($options['attr'])) {
-                $attrs = array('attr' => array_merge($typeGuessOptions['attr'], $options['attr']));
+                $attrs = ['attr' => array_merge($typeGuessOptions['attr'], $options['attr'])];
             }
 
             $options = array_merge($typeGuessOptions, $options, $attrs);
         }
 
         return $this->createNamedBuilder($property, $type, $data, $options);
-    }
-
-    /**
-     * Wraps a type into a ResolvedFormTypeInterface implementation and connects
-     * it with its parent type.
-     *
-     * @return ResolvedFormTypeInterface The resolved type
-     */
-    private function resolveType(FormTypeInterface $type)
-    {
-        $parentType = $type->getParent();
-
-        if ($parentType instanceof FormTypeInterface) {
-            $parentType = $this->resolveType($parentType);
-        } elseif (null !== $parentType) {
-            $parentType = $this->registry->getType($parentType);
-        }
-
-        return $this->resolvedTypeFactory->createResolvedType(
-            $type,
-            // Type extensions are not supported for unregistered type instances,
-            // i.e. type instances that are passed to the FormFactory directly,
-            // nor for their parents, if getParent() also returns a type instance.
-            array(),
-            $parentType
-        );
     }
 }

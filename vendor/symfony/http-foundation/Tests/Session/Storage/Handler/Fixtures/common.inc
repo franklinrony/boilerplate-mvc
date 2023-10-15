@@ -54,97 +54,95 @@ ob_start();
 class TestSessionHandler extends AbstractSessionHandler
 {
     private $data;
+    private ?string $sessionId;
 
-    public function __construct($data = '')
+    public function __construct($data = '', $sessionId = null)
     {
         $this->data = $data;
+        $this->sessionId = $sessionId;
     }
 
-    public function open($path, $name)
+    public function open(string $path, string $name): bool
     {
         echo __FUNCTION__, "\n";
 
         return parent::open($path, $name);
     }
 
-    public function validateId($sessionId)
+    public function validateId(string $sessionId): bool
     {
         echo __FUNCTION__, "\n";
 
         return parent::validateId($sessionId);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function read($sessionId)
+    public function read(string $sessionId): string
     {
         echo __FUNCTION__, "\n";
 
         return parent::read($sessionId);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function updateTimestamp($sessionId, $data)
+    public function updateTimestamp($sessionId, $data): bool
     {
         echo __FUNCTION__, "\n";
 
         return true;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function write($sessionId, $data)
+    public function write(string $sessionId, string $data): bool
     {
         echo __FUNCTION__, "\n";
 
         return parent::write($sessionId, $data);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function destroy($sessionId)
+    public function destroy(string $sessionId): bool
     {
         echo __FUNCTION__, "\n";
 
         return parent::destroy($sessionId);
     }
 
-    public function close()
+    public function close(): bool
     {
         echo __FUNCTION__, "\n";
 
         return true;
     }
 
-    public function gc($maxLifetime)
+    public function gc($maxLifetime): int|false
     {
         echo __FUNCTION__, "\n";
 
-        return true;
+        return 1;
     }
 
-    protected function doRead($sessionId)
+    protected function doRead($sessionId): string
     {
-        echo __FUNCTION__.': ', $this->data, "\n";
+        if (isset($this->sessionId) && $sessionId !== $this->sessionId) {
+            echo __FUNCTION__ . ": invalid sessionId\n";
+
+            return '';
+        }
+        echo __FUNCTION__ . ': ', $this->data, "\n";
+        $this->sessionId = $sessionId;
 
         return $this->data;
     }
 
-    protected function doWrite($sessionId, $data)
+    protected function doWrite($sessionId, $data): bool
     {
         echo __FUNCTION__.': ', $data, "\n";
+        $this->sessionId = $sessionId;
 
         return true;
     }
 
-    protected function doDestroy($sessionId)
+    protected function doDestroy($sessionId): bool
     {
         echo __FUNCTION__, "\n";
+        $this->sessionId = '';
 
         return true;
     }

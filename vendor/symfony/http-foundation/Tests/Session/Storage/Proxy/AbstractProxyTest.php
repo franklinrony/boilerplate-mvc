@@ -27,12 +27,12 @@ class AbstractProxyTest extends TestCase
      */
     protected $proxy;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->proxy = $this->getMockForAbstractClass(AbstractProxy::class);
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->proxy = null;
     }
@@ -56,6 +56,7 @@ class AbstractProxyTest extends TestCase
 
     /**
      * @runInSeparateProcess
+     *
      * @preserveGlobalState disabled
      */
     public function testIsActive()
@@ -67,6 +68,7 @@ class AbstractProxyTest extends TestCase
 
     /**
      * @runInSeparateProcess
+     *
      * @preserveGlobalState disabled
      */
     public function testName()
@@ -79,17 +81,19 @@ class AbstractProxyTest extends TestCase
 
     /**
      * @runInSeparateProcess
+     *
      * @preserveGlobalState disabled
-     * @expectedException \LogicException
      */
     public function testNameException()
     {
+        $this->expectException(\LogicException::class);
         session_start();
         $this->proxy->setName('foo');
     }
 
     /**
      * @runInSeparateProcess
+     *
      * @preserveGlobalState disabled
      */
     public function testId()
@@ -102,11 +106,12 @@ class AbstractProxyTest extends TestCase
 
     /**
      * @runInSeparateProcess
+     *
      * @preserveGlobalState disabled
-     * @expectedException \LogicException
      */
     public function testIdException()
     {
+        $this->expectException(\LogicException::class);
         session_start();
         $this->proxy->setId('foo');
     }

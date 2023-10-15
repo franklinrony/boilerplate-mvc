@@ -12,7 +12,6 @@
 namespace Symfony\Bridge\Twig\Extension;
 
 use Symfony\Component\Yaml\Dumper as YamlDumper;
-use Symfony\Component\Yaml\Yaml;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFilter;
 
@@ -21,52 +20,39 @@ use Twig\TwigFilter;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class YamlExtension extends AbstractExtension
+final class YamlExtension extends AbstractExtension
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function getFilters()
+    public function getFilters(): array
     {
-        return array(
-            new TwigFilter('yaml_encode', array($this, 'encode')),
-            new TwigFilter('yaml_dump', array($this, 'dump')),
-        );
+        return [
+            new TwigFilter('yaml_encode', $this->encode(...)),
+            new TwigFilter('yaml_dump', $this->dump(...)),
+        ];
     }
 
-    public function encode($input, $inline = 0, $dumpObjects = false)
+    public function encode(mixed $input, int $inline = 0, int $dumpObjects = 0): string
     {
         static $dumper;
 
-        if (null === $dumper) {
-            $dumper = new YamlDumper();
-        }
+        $dumper ??= new YamlDumper();
 
-        if (defined('Symfony\Component\Yaml\Yaml::DUMP_OBJECT')) {
-            return $dumper->dump($input, $inline, 0, is_bool($dumpObjects) ? Yaml::DUMP_OBJECT : 0);
+        if (\defined('Symfony\Component\Yaml\Yaml::DUMP_OBJECT')) {
+            return $dumper->dump($input, $inline, 0, $dumpObjects);
         }
 
         return $dumper->dump($input, $inline, 0, false, $dumpObjects);
     }
 
-    public function dump($value, $inline = 0, $dumpObjects = false)
+    public function dump(mixed $value, int $inline = 0, int $dumpObjects = 0): string
     {
-        if (is_resource($value)) {
+        if (\is_resource($value)) {
             return '%Resource%';
         }
 
-        if (is_array($value) || is_object($value)) {
-            return '%'.gettype($value).'% '.$this->encode($value, $inline, $dumpObjects);
+        if (\is_array($value) || \is_object($value)) {
+            return '%'.\gettype($value).'% '.$this->encode($value, $inline, $dumpObjects);
         }
 
         return $this->encode($value, $inline, $dumpObjects);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
-    {
-        return 'yaml';
     }
 }

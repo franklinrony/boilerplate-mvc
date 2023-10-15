@@ -11,59 +11,67 @@
 
 namespace Symfony\Component\Validator\Tests\Constraints;
 
+use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints\NotEqualTo;
 use Symfony\Component\Validator\Constraints\NotEqualToValidator;
-use Symfony\Component\Validator\Validation;
 
 /**
  * @author Daniel Holmes <daniel@danielholmes.org>
  */
 class NotEqualToValidatorTest extends AbstractComparisonValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): NotEqualToValidator
     {
         return new NotEqualToValidator();
     }
 
-    protected function createConstraint(array $options = null)
+    protected static function createConstraint(array $options = null): Constraint
     {
         return new NotEqualTo($options);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideValidComparisons()
+    protected function getErrorCode(): ?string
     {
-        return array(
-            array(1, 2),
-            array('22', '333'),
-            array(new \DateTime('2001-01-01'), new \DateTime('2000-01-01')),
-            array(new \DateTime('2001-01-01'), '2000-01-01'),
-            array(new \DateTime('2001-01-01 UTC'), '2000-01-01 UTC'),
-            array(new ComparisonTest_Class(6), new ComparisonTest_Class(5)),
-            array(null, 1),
-        );
+        return NotEqualTo::IS_EQUAL_ERROR;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideInvalidComparisons()
+    public static function provideValidComparisons(): array
     {
-        return array(
-            array(3, '3', 3, '3', 'integer'),
-            array('2', '"2"', 2, '2', 'integer'),
-            array('a', '"a"', 'a', '"a"', 'string'),
-            array(new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', 'DateTime'),
-            array(new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', '2000-01-01', 'Jan 1, 2000, 12:00 AM', 'DateTime'),
-            array(new \DateTime('2000-01-01 UTC'), 'Jan 1, 2000, 12:00 AM', '2000-01-01 UTC', 'Jan 1, 2000, 12:00 AM', 'DateTime'),
-            array(new ComparisonTest_Class(5), '5', new ComparisonTest_Class(5), '5', __NAMESPACE__.'\ComparisonTest_Class'),
-        );
+        return [
+            [1, 2],
+            ['22', '333'],
+            [new \DateTime('2001-01-01'), new \DateTime('2000-01-01')],
+            [new \DateTime('2001-01-01'), '2000-01-01'],
+            [new \DateTime('2001-01-01 UTC'), '2000-01-01 UTC'],
+            [new ComparisonTest_Class(6), new ComparisonTest_Class(5)],
+            [null, 1],
+        ];
+    }
+
+    public static function provideValidComparisonsToPropertyPath(): array
+    {
+        return [
+            [0],
+        ];
+    }
+
+    public static function provideInvalidComparisons(): array
+    {
+        return [
+            [3, '3', 3, '3', 'int'],
+            ['2', '"2"', 2, '2', 'int'],
+            ['a', '"a"', 'a', '"a"', 'string'],
+            [new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', 'DateTime'],
+            [new \DateTime('2000-01-01'), 'Jan 1, 2000, 12:00 AM', '2000-01-01', 'Jan 1, 2000, 12:00 AM', 'DateTime'],
+            [new \DateTime('2000-01-01 UTC'), 'Jan 1, 2000, 12:00 AM', '2000-01-01 UTC', 'Jan 1, 2000, 12:00 AM', 'DateTime'],
+            [new ComparisonTest_Class(5), '5', new ComparisonTest_Class(5), '5', __NAMESPACE__.'\ComparisonTest_Class'],
+        ];
+    }
+
+    public static function provideComparisonsToNullValueAtPropertyPath()
+    {
+        return [
+            [5, '5', true],
+        ];
     }
 }

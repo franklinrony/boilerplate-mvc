@@ -1,0 +1,29 @@
+{
+    "alias": "phinx.phar",
+    "compactors": [
+        "KevinGH\\Box\\Compactor\\Json",
+        "KevinGH\\Box\\Compactor\\Php"
+    ],
+    "directories": ["src", "app", "data"],
+    "files": [
+        "LICENSE"
+    ],
+    "finder": [
+        {
+            "name": "*.php",
+            "exclude": [
+                "File",
+                "mikey179",
+                "Net",
+                "phpunit",
+                "phpunit-test-case",
+                "Tester",
+                "Tests",
+                "tests"
+            ],
+            "in": "vendor"
+        }
+    ],
+    "output": "phinx.phar",
+    "exclude-composer-files": false
+}

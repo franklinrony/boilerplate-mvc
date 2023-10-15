@@ -12,13 +12,8 @@
 namespace Symfony\Component\Validator\Constraints;
 
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
-use Symfony\Component\PropertyAccess\PropertyAccess;
-use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
-use Symfony\Component\PropertyAccess\PropertyPath;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
-use Symfony\Component\Validator\Context\ExecutionContextInterface;
-use Symfony\Component\Validator\Exception\RuntimeException;
 use Symfony\Component\Validator\Exception\UnexpectedTypeException;
 
 /**
@@ -27,88 +22,36 @@ use Symfony\Component\Validator\Exception\UnexpectedTypeException;
  */
 class ExpressionValidator extends ConstraintValidator
 {
-    private $propertyAccessor;
+    private ?ExpressionLanguage $expressionLanguage;
 
-    /**
-     * @var ExpressionLanguage
-     */
-    private $expressionLanguage;
-
-    /**
-     * @throws UnexpectedTypeException If the property accessor is invalid
-     */
-    public function __construct(PropertyAccessorInterface $propertyAccessor = null)
+    public function __construct(ExpressionLanguage $expressionLanguage = null)
     {
-        $this->propertyAccessor = $propertyAccessor;
+        $this->expressionLanguage = $expressionLanguage;
     }
 
     /**
-     * {@inheritdoc}
+     * @return void
      */
-    public function validate($value, Constraint $constraint)
+    public function validate(mixed $value, Constraint $constraint)
     {
         if (!$constraint instanceof Expression) {
-            throw new UnexpectedTypeException($constraint, __NAMESPACE__.'\Expression');
+            throw new UnexpectedTypeException($constraint, Expression::class);
         }
 
-        $variables = array();
+        $variables = $constraint->values;
+        $variables['value'] = $value;
+        $variables['this'] = $this->context->getObject();
 
-        // Symfony 2.5+
-        if ($this->context instanceof ExecutionContextInterface) {
-            $variables['value'] = $value;
-            $variables['this'] = $this->context->getObject();
-        } elseif (null === $this->context->getPropertyName()) {
-            $variables['value'] = $value;
-            $variables['this'] = $value;
-        } else {
-            $root = $this->context->getRoot();
-            $variables['value'] = $value;
-
-            if (is_object($root)) {
-                // Extract the object that the property belongs to from the object
-                // graph
-                $path = new PropertyPath($this->context->getPropertyPath());
-                $parentPath = $path->getParent();
-                $variables['this'] = $parentPath ? $this->getPropertyAccessor()->getValue($root, $parentPath) : $root;
-            } else {
-                $variables['this'] = null;
-            }
-        }
-
-        if (!$this->getExpressionLanguage()->evaluate($constraint->expression, $variables)) {
-            if ($this->context instanceof ExecutionContextInterface) {
-                $this->context->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value, self::OBJECT_TO_STRING))
-                    ->addViolation();
-            } else {
-                $this->buildViolation($constraint->message)
-                    ->setParameter('{{ value }}', $this->formatValue($value, self::OBJECT_TO_STRING))
-                    ->addViolation();
-            }
+        if ($constraint->negate xor $this->getExpressionLanguage()->evaluate($constraint->expression, $variables)) {
+            $this->context->buildViolation($constraint->message)
+                ->setParameter('{{ value }}', $this->formatValue($value, self::OBJECT_TO_STRING))
+                ->setCode(Expression::EXPRESSION_FAILED_ERROR)
+                ->addViolation();
         }
     }
 
-    private function getExpressionLanguage()
+    private function getExpressionLanguage(): ExpressionLanguage
     {
-        if (null === $this->expressionLanguage) {
-            if (!class_exists('Symfony\Component\ExpressionLanguage\ExpressionLanguage')) {
-                throw new RuntimeException('Unable to use expressions as the Symfony ExpressionLanguage component is not installed.');
-            }
-            $this->expressionLanguage = new ExpressionLanguage();
-        }
-
-        return $this->expressionLanguage;
-    }
-
-    private function getPropertyAccessor()
-    {
-        if (null === $this->propertyAccessor) {
-            if (!class_exists('Symfony\Component\PropertyAccess\PropertyAccess')) {
-                throw new RuntimeException('Unable to use expressions as the Symfony PropertyAccess component is not installed.');
-            }
-            $this->propertyAccessor = PropertyAccess::createPropertyAccessor();
-        }
-
-        return $this->propertyAccessor;
+        return $this->expressionLanguage ??= new ExpressionLanguage();
     }
 }

@@ -11,7 +11,6 @@
 
 namespace Symfony\Bridge\Twig\Extension;
 
-use Symfony\Component\HttpKernel\Fragment\FragmentHandler;
 use Symfony\Component\HttpKernel\Controller\ControllerReference;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
@@ -21,68 +20,20 @@ use Twig\TwigFunction;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class HttpKernelExtension extends AbstractExtension
+final class HttpKernelExtension extends AbstractExtension
 {
-    private $handler;
-
-    public function __construct(FragmentHandler $handler)
+    public function getFunctions(): array
     {
-        $this->handler = $handler;
+        return [
+            new TwigFunction('render', [HttpKernelRuntime::class, 'renderFragment'], ['is_safe' => ['html']]),
+            new TwigFunction('render_*', [HttpKernelRuntime::class, 'renderFragmentStrategy'], ['is_safe' => ['html']]),
+            new TwigFunction('fragment_uri', [HttpKernelRuntime::class, 'generateFragmentUri']),
+            new TwigFunction('controller', static::class.'::controller'),
+        ];
     }
 
-    public function getFunctions()
-    {
-        return array(
-            new TwigFunction('render', array($this, 'renderFragment'), array('is_safe' => array('html'))),
-            new TwigFunction('render_*', array($this, 'renderFragmentStrategy'), array('is_safe' => array('html'))),
-            new TwigFunction('controller', array($this, 'controller')),
-        );
-    }
-
-    /**
-     * Renders a fragment.
-     *
-     * @param string|ControllerReference $uri     A URI as a string or a ControllerReference instance
-     * @param array                      $options An array of options
-     *
-     * @return string The fragment content
-     *
-     * @see FragmentHandler::render()
-     */
-    public function renderFragment($uri, $options = array())
-    {
-        $strategy = isset($options['strategy']) ? $options['strategy'] : 'inline';
-        unset($options['strategy']);
-
-        return $this->handler->render($uri, $strategy, $options);
-    }
-
-    /**
-     * Renders a fragment.
-     *
-     * @param string                     $strategy A strategy name
-     * @param string|ControllerReference $uri      A URI as a string or a ControllerReference instance
-     * @param array                      $options  An array of options
-     *
-     * @return string The fragment content
-     *
-     * @see FragmentHandler::render()
-     */
-    public function renderFragmentStrategy($strategy, $uri, $options = array())
-    {
-        return $this->handler->render($uri, $strategy, $options);
-    }
-
-    public function controller($controller, $attributes = array(), $query = array())
+    public static function controller(string $controller, array $attributes = [], array $query = []): ControllerReference
     {
         return new ControllerReference($controller, $attributes, $query);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
-    {
-        return 'http_kernel';
     }
 }

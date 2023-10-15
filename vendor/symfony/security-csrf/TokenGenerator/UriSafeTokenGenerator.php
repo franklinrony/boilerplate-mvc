@@ -11,9 +11,6 @@
 
 namespace Symfony\Component\Security\Csrf\TokenGenerator;
 
-use Symfony\Component\Security\Core\Util\SecureRandomInterface;
-use Symfony\Component\Security\Core\Util\SecureRandom;
-
 /**
  * Generates CSRF tokens.
  *
@@ -21,30 +18,28 @@ use Symfony\Component\Security\Core\Util\SecureRandom;
  */
 class UriSafeTokenGenerator implements TokenGeneratorInterface
 {
-    private $random;
-    private $entropy;
+    private int $entropy;
 
     /**
      * Generates URI-safe CSRF tokens.
      *
-     * @param SecureRandomInterface|null $random  The random value generator used for generating entropy
-     * @param int                        $entropy The amount of entropy collected for each token (in bits)
+     * @param int $entropy The amount of entropy collected for each token (in bits)
      */
-    public function __construct(SecureRandomInterface $random = null, $entropy = 256)
+    public function __construct(int $entropy = 256)
     {
-        $this->random = $random ?: new SecureRandom();
+        if ($entropy <= 7) {
+            throw new \InvalidArgumentException('Entropy should be greater than 7.');
+        }
+
         $this->entropy = $entropy;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function generateToken()
+    public function generateToken(): string
     {
         // Generate an URI safe base64 encoded string that does not contain "+",
         // "/" or "=" which need to be URL encoded and make URLs unnecessarily
         // longer.
-        $bytes = $this->random->nextBytes($this->entropy / 8);
+        $bytes = random_bytes(intdiv($this->entropy, 8));
 
         return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
     }

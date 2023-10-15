@@ -13,7 +13,7 @@ namespace Symfony\Component\Security\Core\Tests\Authentication\Token;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Security\Core\Authentication\Token\RememberMeToken;
-use Symfony\Component\Security\Core\Role\Role;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 class RememberMeTokenTest extends TestCase
 {
@@ -22,30 +22,15 @@ class RememberMeTokenTest extends TestCase
         $user = $this->getUser();
         $token = new RememberMeToken($user, 'fookey', 'foo');
 
-        $this->assertEquals('fookey', $token->getProviderKey());
+        $this->assertEquals('fookey', $token->getFirewallName());
         $this->assertEquals('foo', $token->getSecret());
-        $this->assertEquals(array(new Role('ROLE_FOO')), $token->getRoles());
+        $this->assertEquals(['ROLE_FOO'], $token->getRoleNames());
         $this->assertSame($user, $token->getUser());
-        $this->assertTrue($token->isAuthenticated());
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
-    public function testConstructorSecretCannotBeNull()
-    {
-        new RememberMeToken(
-            $this->getUser(),
-            null,
-            null
-        );
-    }
-
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testConstructorSecretCannotBeEmptyString()
     {
+        $this->expectException(\InvalidArgumentException::class);
         new RememberMeToken(
             $this->getUser(),
             '',
@@ -53,13 +38,13 @@ class RememberMeTokenTest extends TestCase
         );
     }
 
-    protected function getUser($roles = array('ROLE_FOO'))
+    protected function getUser($roles = ['ROLE_FOO'])
     {
-        $user = $this->getMockBuilder('Symfony\Component\Security\Core\User\UserInterface')->getMock();
+        $user = $this->createMock(UserInterface::class);
         $user
-            ->expects($this->once())
+            ->expects($this->any())
             ->method('getRoles')
-            ->will($this->returnValue($roles))
+            ->willReturn($roles)
         ;
 
         return $user;

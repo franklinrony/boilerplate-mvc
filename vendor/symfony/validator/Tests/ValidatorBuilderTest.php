@@ -11,23 +11,30 @@
 
 namespace Symfony\Component\Validator\Tests;
 
+use Doctrine\Common\Annotations\PsrCachedReader;
+use Doctrine\Common\Annotations\Reader;
 use PHPUnit\Framework\TestCase;
+use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Validator\ConstraintValidatorFactoryInterface;
+use Symfony\Component\Validator\Mapping\Loader\AnnotationLoader;
+use Symfony\Component\Validator\ObjectInitializerInterface;
+use Symfony\Component\Validator\Validator\RecursiveValidator;
 use Symfony\Component\Validator\ValidatorBuilder;
-use Symfony\Component\Validator\ValidatorBuilderInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 class ValidatorBuilderTest extends TestCase
 {
     /**
-     * @var ValidatorBuilderInterface
+     * @var ValidatorBuilder
      */
     protected $builder;
 
-    protected function setUp()
+    protected function setUp(): void
     {
         $this->builder = new ValidatorBuilder();
     }
 
-    protected function tearDown()
+    protected function tearDown(): void
     {
         $this->builder = null;
     }
@@ -35,13 +42,13 @@ class ValidatorBuilderTest extends TestCase
     public function testAddObjectInitializer()
     {
         $this->assertSame($this->builder, $this->builder->addObjectInitializer(
-            $this->getMockBuilder('Symfony\Component\Validator\ObjectInitializerInterface')->getMock()
+            $this->createMock(ObjectInitializerInterface::class)
         ));
     }
 
     public function testAddObjectInitializers()
     {
-        $this->assertSame($this->builder, $this->builder->addObjectInitializers(array()));
+        $this->assertSame($this->builder, $this->builder->addObjectInitializers([]));
     }
 
     public function testAddXmlMapping()
@@ -51,7 +58,7 @@ class ValidatorBuilderTest extends TestCase
 
     public function testAddXmlMappings()
     {
-        $this->assertSame($this->builder, $this->builder->addXmlMappings(array()));
+        $this->assertSame($this->builder, $this->builder->addXmlMappings([]));
     }
 
     public function testAddYamlMapping()
@@ -61,7 +68,7 @@ class ValidatorBuilderTest extends TestCase
 
     public function testAddYamlMappings()
     {
-        $this->assertSame($this->builder, $this->builder->addYamlMappings(array()));
+        $this->assertSame($this->builder, $this->builder->addYamlMappings([]));
     }
 
     public function testAddMethodMapping()
@@ -71,12 +78,37 @@ class ValidatorBuilderTest extends TestCase
 
     public function testAddMethodMappings()
     {
-        $this->assertSame($this->builder, $this->builder->addMethodMappings(array()));
+        $this->assertSame($this->builder, $this->builder->addMethodMappings([]));
     }
 
-    public function testEnableAnnotationMapping()
+    public function testEnableAnnotationMappingWithDefaultDoctrineAnnotationReader()
     {
         $this->assertSame($this->builder, $this->builder->enableAnnotationMapping());
+        $this->assertSame($this->builder, $this->builder->addDefaultDoctrineAnnotationReader());
+
+        $loaders = $this->builder->getLoaders();
+        $this->assertCount(1, $loaders);
+        $this->assertInstanceOf(AnnotationLoader::class, $loaders[0]);
+
+        $r = new \ReflectionProperty(AnnotationLoader::class, 'reader');
+
+        $this->assertInstanceOf(PsrCachedReader::class, $r->getValue($loaders[0]));
+    }
+
+    public function testEnableAnnotationMappingWithCustomDoctrineAnnotationReader()
+    {
+        $reader = $this->createMock(Reader::class);
+
+        $this->assertSame($this->builder, $this->builder->enableAnnotationMapping());
+        $this->assertSame($this->builder, $this->builder->setDoctrineAnnotationReader($reader));
+
+        $loaders = $this->builder->getLoaders();
+        $this->assertCount(1, $loaders);
+        $this->assertInstanceOf(AnnotationLoader::class, $loaders[0]);
+
+        $r = new \ReflectionProperty(AnnotationLoader::class, 'reader');
+
+        $this->assertSame($reader, $r->getValue($loaders[0]));
     }
 
     public function testDisableAnnotationMapping()
@@ -84,24 +116,22 @@ class ValidatorBuilderTest extends TestCase
         $this->assertSame($this->builder, $this->builder->disableAnnotationMapping());
     }
 
-    public function testSetMetadataCache()
+    public function testSetMappingCache()
     {
-        $this->assertSame($this->builder, $this->builder->setMetadataCache(
-            $this->getMockBuilder('Symfony\Component\Validator\Mapping\Cache\CacheInterface')->getMock())
-        );
+        $this->assertSame($this->builder, $this->builder->setMappingCache($this->createMock(CacheItemPoolInterface::class)));
     }
 
     public function testSetConstraintValidatorFactory()
     {
         $this->assertSame($this->builder, $this->builder->setConstraintValidatorFactory(
-            $this->getMockBuilder('Symfony\Component\Validator\ConstraintValidatorFactoryInterface')->getMock())
+            $this->createMock(ConstraintValidatorFactoryInterface::class))
         );
     }
 
     public function testSetTranslator()
     {
         $this->assertSame($this->builder, $this->builder->setTranslator(
-            $this->getMockBuilder('Symfony\Component\Translation\TranslatorInterface')->getMock())
+            $this->createMock(TranslatorInterface::class))
         );
     }
 
@@ -112,6 +142,6 @@ class ValidatorBuilderTest extends TestCase
 
     public function testGetValidator()
     {
-        $this->assertInstanceOf('Symfony\Component\Validator\Validator\RecursiveValidator', $this->builder->getValidator());
+        $this->assertInstanceOf(RecursiveValidator::class, $this->builder->getValidator());
     }
 }

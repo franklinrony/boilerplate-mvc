@@ -11,9 +11,9 @@
 
 namespace Symfony\Component\Form\Tests\Extension\Core\Type;
 
-class PasswordTypeTest extends BaseTypeTest
+class PasswordTypeTest extends BaseTypeTestCase
 {
-    const TESTED_TYPE = 'password';
+    public const TESTED_TYPE = 'Symfony\Component\Form\Extension\Core\Type\PasswordType';
 
     public function testEmptyIfNotSubmitted()
     {
@@ -33,7 +33,7 @@ class PasswordTypeTest extends BaseTypeTest
 
     public function testNotEmptyIfSubmittedAndNotAlwaysEmpty()
     {
-        $form = $this->factory->create(static::TESTED_TYPE, null, array('always_empty' => false));
+        $form = $this->factory->create(static::TESTED_TYPE, null, ['always_empty' => false]);
         $form->submit('pAs5w0rd');
 
         $this->assertSame('pAs5w0rd', $form->createView()->vars['value']);

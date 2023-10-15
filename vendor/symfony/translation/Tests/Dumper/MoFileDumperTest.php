@@ -12,21 +12,18 @@
 namespace Symfony\Component\Translation\Tests\Dumper;
 
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Translation\MessageCatalogue;
 use Symfony\Component\Translation\Dumper\MoFileDumper;
+use Symfony\Component\Translation\MessageCatalogue;
 
 class MoFileDumperTest extends TestCase
 {
-    public function testDump()
+    public function testFormatCatalogue()
     {
         $catalogue = new MessageCatalogue('en');
-        $catalogue->add(array('foo' => 'bar'));
+        $catalogue->add(['foo' => 'bar']);
 
-        $tempDir = sys_get_temp_dir();
         $dumper = new MoFileDumper();
-        $dumper->dump($catalogue, array('path' => $tempDir));
-        $this->assertFileEquals(__DIR__.'/../fixtures/resources.mo', $tempDir.'/messages.en.mo');
 
-        unlink($tempDir.'/messages.en.mo');
+        $this->assertStringEqualsFile(__DIR__.'/../fixtures/resources.mo', $dumper->formatCatalogue($catalogue, 'messages'));
     }
 }

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,28 +16,29 @@
  */
 namespace Cake\Database;
 
+use Closure;
+
 /**
  * An interface used by Expression objects.
  */
 interface ExpressionInterface
 {
-
     /**
      * Converts the Node into a SQL string fragment.
      *
-     * @param \Cake\Database\ValueBinder $generator Placeholder generator object
+     * @param \Cake\Database\ValueBinder $binder Parameter binder
      * @return string
      */
-    public function sql(ValueBinder $generator);
+    public function sql(ValueBinder $binder): string;
 
     /**
      * Iterates over each part of the expression recursively for every
-     * level of the expressions tree and executes the $visitor callable
+     * level of the expressions tree and executes the callback,
      * passing as first parameter the instance of the expression currently
      * being iterated.
      *
-     * @param callable $visitor The callable to apply to all nodes.
-     * @return void
+     * @param \Closure $callback The callback to run for all nodes.
+     * @return $this
      */
-    public function traverse(callable $visitor);
+    public function traverse(Closure $callback);
 }

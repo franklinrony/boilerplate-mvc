@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -27,8 +29,8 @@ use InvalidArgumentException;
  *
  * ### Adding rules
  *
- * Rules must be callable objects that return true/false depending on whether or
- * not the rule has been satisfied. You can use RulesChecker::add(), RulesChecker::addCreate(),
+ * Rules must be callable objects that return true/false depending on whether
+ * the rule has been satisfied. You can use RulesChecker::add(), RulesChecker::addCreate(),
  * RulesChecker::addUpdate() and RulesChecker::addDelete to add rules to a checker.
  *
  * ### Running checks
@@ -44,73 +46,73 @@ class RulesChecker
      *
      * @var string
      */
-    const CREATE = 'create';
+    public const CREATE = 'create';
 
     /**
      * Indicates that the checking rules to apply are those used for updating entities
      *
      * @var string
      */
-    const UPDATE = 'update';
+    public const UPDATE = 'update';
 
     /**
      * Indicates that the checking rules to apply are those used for deleting entities
      *
      * @var string
      */
-    const DELETE = 'delete';
+    public const DELETE = 'delete';
 
     /**
      * The list of rules to be checked on both create and update operations
      *
-     * @var callable[]
+     * @var array<\Cake\Datasource\RuleInvoker>
      */
-    protected $_rules = [];
+    protected array $_rules = [];
 
     /**
      * The list of rules to check during create operations
      *
-     * @var callable[]
+     * @var array<\Cake\Datasource\RuleInvoker>
      */
-    protected $_createRules = [];
+    protected array $_createRules = [];
 
     /**
      * The list of rules to check during update operations
      *
-     * @var callable[]
+     * @var array<\Cake\Datasource\RuleInvoker>
      */
-    protected $_updateRules = [];
+    protected array $_updateRules = [];
 
     /**
      * The list of rules to check during delete operations
      *
-     * @var callable[]
+     * @var array<\Cake\Datasource\RuleInvoker>
      */
-    protected $_deleteRules = [];
+    protected array $_deleteRules = [];
 
     /**
      * List of options to pass to every callable rule
      *
      * @var array
      */
-    protected $_options = [];
+    protected array $_options = [];
 
     /**
-     * Whether or not to use I18n functions for translating default error messages
+     * Whether to use I18n functions for translating default error messages
      *
      * @var bool
      */
-    protected $_useI18n = false;
+    protected bool $_useI18n = false;
 
     /**
      * Constructor. Takes the options to be passed to all rules.
      *
-     * @param array $options The options to pass to every rule
+     * @param array<string, mixed> $options The options to pass to every rule
      */
     public function __construct(array $options = [])
     {
         $this->_options = $options;
-        $this->_useI18n = function_exists('__d');
+        $this->_useI18n = function_exists('\Cake\I18n\__d');
     }
 
     /**
@@ -127,12 +129,12 @@ class RulesChecker
      *
      * @param callable $rule A callable function or object that will return whether
      * the entity is valid or not.
-     * @param string|null $name The alias for a rule.
-     * @param array $options List of extra options to pass to the rule callable as
+     * @param array|string|null $name The alias for a rule, or an array of options.
+     * @param array<string, mixed> $options List of extra options to pass to the rule callable as
      * second argument.
      * @return $this
      */
-    public function add(callable $rule, $name = null, array $options = [])
+    public function add(callable $rule, array|string|null $name = null, array $options = [])
     {
         $this->_rules[] = $this->_addError($rule, $name, $options);
 
@@ -152,12 +154,12 @@ class RulesChecker
      *
      * @param callable $rule A callable function or object that will return whether
      * the entity is valid or not.
-     * @param string|null $name The alias for a rule.
-     * @param array $options List of extra options to pass to the rule callable as
+     * @param array|string|null $name The alias for a rule or an array of options.
+     * @param array<string, mixed> $options List of extra options to pass to the rule callable as
      * second argument.
      * @return $this
      */
-    public function addCreate(callable $rule, $name = null, array $options = [])
+    public function addCreate(callable $rule, array|string|null $name = null, array $options = [])
     {
         $this->_createRules[] = $this->_addError($rule, $name, $options);
 
@@ -177,12 +179,12 @@ class RulesChecker
      *
      * @param callable $rule A callable function or object that will return whether
      * the entity is valid or not.
-     * @param string|null $name The alias for a rule.
-     * @param array $options List of extra options to pass to the rule callable as
+     * @param array|string|null $name The alias for a rule, or an array of options.
+     * @param array<string, mixed> $options List of extra options to pass to the rule callable as
      * second argument.
      * @return $this
      */
-    public function addUpdate(callable $rule, $name = null, array $options = [])
+    public function addUpdate(callable $rule, array|string|null $name = null, array $options = [])
     {
         $this->_updateRules[] = $this->_addError($rule, $name, $options);
 
@@ -202,12 +204,12 @@ class RulesChecker
      *
      * @param callable $rule A callable function or object that will return whether
      * the entity is valid or not.
-     * @param string|null $name The alias for a rule.
-     * @param array $options List of extra options to pass to the rule callable as
+     * @param array|string|null $name The alias for a rule, or an array of options.
+     * @param array<string, mixed> $options List of extra options to pass to the rule callable as
      * second argument.
      * @return $this
      */
-    public function addDelete(callable $rule, $name = null, array $options = [])
+    public function addDelete(callable $rule, array|string|null $name = null, array $options = [])
     {
         $this->_deleteRules[] = $this->_addError($rule, $name, $options);
 
@@ -221,11 +223,11 @@ class RulesChecker
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
      * @param string $mode Either 'create, 'update' or 'delete'.
-     * @param array $options Extra options to pass to checker functions.
+     * @param array<string, mixed> $options Extra options to pass to checker functions.
      * @return bool
      * @throws \InvalidArgumentException if an invalid mode is passed.
      */
-    public function check(EntityInterface $entity, $mode, array $options = [])
+    public function check(EntityInterface $entity, string $mode, array $options = []): bool
     {
         if ($mode === self::CREATE) {
             return $this->checkCreate($entity, $options);
@@ -247,10 +249,10 @@ class RulesChecker
      * of them pass. The rules selected will be only those specified to be run on 'create'
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
-     * @param array $options Extra options to pass to checker functions.
+     * @param array<string, mixed> $options Extra options to pass to checker functions.
      * @return bool
      */
-    public function checkCreate(EntityInterface $entity, array $options = [])
+    public function checkCreate(EntityInterface $entity, array $options = []): bool
     {
         return $this->_checkRules($entity, $options, array_merge($this->_rules, $this->_createRules));
     }
@@ -260,10 +262,10 @@ class RulesChecker
      * of them pass. The rules selected will be only those specified to be run on 'update'
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
-     * @param array $options Extra options to pass to checker functions.
+     * @param array<string, mixed> $options Extra options to pass to checker functions.
      * @return bool
      */
-    public function checkUpdate(EntityInterface $entity, array $options = [])
+    public function checkUpdate(EntityInterface $entity, array $options = []): bool
     {
         return $this->_checkRules($entity, $options, array_merge($this->_rules, $this->_updateRules));
     }
@@ -273,10 +275,10 @@ class RulesChecker
      * of them pass. The rules selected will be only those specified to be run on 'delete'
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
-     * @param array $options Extra options to pass to checker functions.
+     * @param array<string, mixed> $options Extra options to pass to checker functions.
      * @return bool
      */
-    public function checkDelete(EntityInterface $entity, array $options = [])
+    public function checkDelete(EntityInterface $entity, array $options = []): bool
     {
         return $this->_checkRules($entity, $options, $this->_deleteRules);
     }
@@ -286,11 +288,11 @@ class RulesChecker
      * iterates an array containing the rules to be checked and checks them all.
      *
      * @param \Cake\Datasource\EntityInterface $entity The entity to check for validity.
-     * @param array $options Extra options to pass to checker functions.
-     * @param array $rules The list of rules that must be checked.
+     * @param array<string, mixed> $options Extra options to pass to checker functions.
+     * @param array<\Cake\Datasource\RuleInvoker> $rules The list of rules that must be checked.
      * @return bool
      */
-    protected function _checkRules(EntityInterface $entity, array $options = [], array $rules = [])
+    protected function _checkRules(EntityInterface $entity, array $options = [], array $rules = []): bool
     {
         $success = true;
         $options += $this->_options;
@@ -305,12 +307,12 @@ class RulesChecker
      * Utility method for decorating any callable so that if it returns false, the correct
      * property in the entity is marked as invalid.
      *
-     * @param callable $rule The rule to decorate
-     * @param string $name The alias for a rule.
-     * @param array $options The options containing the error message and field.
-     * @return callable
+     * @param \Cake\Datasource\RuleInvoker|callable $rule The rule to decorate
+     * @param array|string|null $name The alias for a rule or an array of options
+     * @param array<string, mixed> $options The options containing the error message and field.
+     * @return \Cake\Datasource\RuleInvoker
      */
-    protected function _addError($rule, $name, $options)
+    protected function _addError(callable $rule, array|string|null $name = null, array $options = []): RuleInvoker
     {
         if (is_array($name)) {
             $options = $name;

@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -15,7 +17,9 @@
 namespace Cake\Database\Expression;
 
 use Cake\Database\ExpressionInterface;
+use Cake\Database\Query;
 use Cake\Database\ValueBinder;
+use Closure;
 
 /**
  * An expression object for complex ORDER BY clauses
@@ -29,7 +33,7 @@ class OrderClauseExpression implements ExpressionInterface, FieldInterface
      *
      * @var string
      */
-    protected $_direction;
+    protected string $_direction;
 
     /**
      * Constructor
@@ -37,34 +41,39 @@ class OrderClauseExpression implements ExpressionInterface, FieldInterface
      * @param \Cake\Database\ExpressionInterface|string $field The field to order on.
      * @param string $direction The direction to sort on.
      */
-    public function __construct($field, $direction)
+    public function __construct(ExpressionInterface|string $field, string $direction)
     {
         $this->_field = $field;
         $this->_direction = strtolower($direction) === 'asc' ? 'ASC' : 'DESC';
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function sql(ValueBinder $generator)
+    public function sql(ValueBinder $binder): string
     {
         $field = $this->_field;
-        if ($field instanceof ExpressionInterface) {
-            $field = $field->sql($generator);
+        if ($field instanceof Query) {
+            $field = sprintf('(%s)', $field->sql($binder));
+        } elseif ($field instanceof ExpressionInterface) {
+            $field = $field->sql($binder);
         }
+        assert(is_string($field));
 
         return sprintf('%s %s', $field, $this->_direction);
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function traverse(callable $visitor)
+    public function traverse(Closure $callback)
     {
         if ($this->_field instanceof ExpressionInterface) {
-            $visitor($this->_field);
-            $this->_field->traverse($visitor);
+            $callback($this->_field);
+            $this->_field->traverse($callback);
         }
+
+        return $this;
     }
 
     /**

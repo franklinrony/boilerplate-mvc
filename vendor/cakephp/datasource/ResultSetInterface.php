@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -15,12 +17,12 @@
 namespace Cake\Datasource;
 
 use Cake\Collection\CollectionInterface;
-use Countable;
-use Serializable;
 
 /**
  * Describes how a collection of datasource results should look like
+ *
+ * @template T
  */
-interface ResultSetInterface extends CollectionInterface, Countable, Serializable
+interface ResultSetInterface extends CollectionInterface
 {
 }

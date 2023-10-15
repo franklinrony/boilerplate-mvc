@@ -16,8 +16,8 @@ use Symfony\Component\Validator\ConstraintValidator;
 
 class FailingConstraintValidator extends ConstraintValidator
 {
-    public function validate($value, Constraint $constraint)
+    public function validate($value, Constraint $constraint): void
     {
-        $this->context->addViolation($constraint->message, array());
+        $this->context->addViolation($constraint->message, []);
     }
 }

@@ -12,14 +12,21 @@
 namespace Symfony\Component\HttpFoundation\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Symfony\Bridge\PhpUnit\ExpectDeprecationTrait;
+use Symfony\Component\HttpFoundation\Exception\ConflictingHeadersException;
+use Symfony\Component\HttpFoundation\Exception\JsonException;
 use Symfony\Component\HttpFoundation\Exception\SuspiciousOperationException;
+use Symfony\Component\HttpFoundation\InputBag;
+use Symfony\Component\HttpFoundation\ParameterBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
 class RequestTest extends TestCase
 {
-    protected function tearDown()
+    use ExpectDeprecationTrait;
+
+    protected function tearDown(): void
     {
         Request::setTrustedProxies([], -1);
         Request::setTrustedHosts([]);
@@ -74,12 +81,31 @@ class RequestTest extends TestCase
         $this->assertFalse($isNoCache);
     }
 
+    /**
+     * @group legacy
+     */
     public function testGetContentType()
     {
+        $this->expectDeprecation('Since symfony/http-foundation 6.2: The "Symfony\Component\HttpFoundation\Request::getContentType()" method is deprecated, use "getContentTypeFormat()" instead.');
         $request = new Request();
+
         $contentType = $request->getContentType();
 
         $this->assertNull($contentType);
+    }
+
+    public function testGetContentTypeFormat()
+    {
+        $request = new Request();
+        $this->assertNull($request->getContentTypeFormat());
+
+        $server = ['HTTP_CONTENT_TYPE' => 'application/json'];
+        $request = new Request([], [], [], [], [], $server);
+        $this->assertEquals('json', $request->getContentTypeFormat());
+
+        $server = ['HTTP_CONTENT_TYPE' => 'text/html'];
+        $request = new Request([], [], [], [], [], $server);
+        $this->assertEquals('html', $request->getContentTypeFormat());
     }
 
     public function testSetDefaultLocale()
@@ -117,13 +143,14 @@ class RequestTest extends TestCase
         $this->assertEquals('test.com', $request->getHttpHost());
         $this->assertFalse($request->isSecure());
 
-        $request = Request::create('https://test.com/foo?bar=baz');
-        $this->assertEquals('https://test.com/foo?bar=baz', $request->getUri());
+        $request = Request::create('https://test.com/foo?foo.bar=baz');
+        $this->assertEquals('https://test.com/foo?foo.bar=baz', $request->getUri());
         $this->assertEquals('/foo', $request->getPathInfo());
-        $this->assertEquals('bar=baz', $request->getQueryString());
+        $this->assertEquals('foo.bar=baz', $request->getQueryString());
         $this->assertEquals(443, $request->getPort());
         $this->assertEquals('test.com', $request->getHttpHost());
         $this->assertTrue($request->isSecure());
+        $this->assertSame(['foo_bar' => 'baz'], $request->query->all());
 
         $request = Request::create('test.com:90/foo');
         $this->assertEquals('http://test.com:90/foo', $request->getUri());
@@ -301,7 +328,7 @@ class RequestTest extends TestCase
         $this->assertSame($expected, $request->server->get('REQUEST_URI'), 'Normalize the request URI.');
     }
 
-    public function getRequestUriData()
+    public static function getRequestUriData()
     {
         $message = 'Do not modify the path.';
         yield ['/foo', '/foo', $message];
@@ -399,8 +426,32 @@ class RequestTest extends TestCase
         $this->assertEquals('xml', $dup->getRequestFormat());
     }
 
+    public function testGetPreferredFormat()
+    {
+        $request = new Request();
+        $this->assertNull($request->getPreferredFormat(null));
+        $this->assertSame('html', $request->getPreferredFormat());
+        $this->assertSame('json', $request->getPreferredFormat('json'));
+
+        $request->setRequestFormat('atom');
+        $request->headers->set('Accept', 'application/ld+json');
+        $this->assertSame('atom', $request->getPreferredFormat());
+
+        $request = new Request();
+        $request->headers->set('Accept', 'application/xml');
+        $this->assertSame('xml', $request->getPreferredFormat());
+
+        $request = new Request();
+        $request->headers->set('Accept', 'application/xml');
+        $this->assertSame('xml', $request->getPreferredFormat());
+
+        $request = new Request();
+        $request->headers->set('Accept', 'application/json;q=0.8,application/xml;q=0.9');
+        $this->assertSame('xml', $request->getPreferredFormat());
+    }
+
     /**
-     * @dataProvider getFormatToMimeTypeMapProviderWithAdditionalNullFormat
+     * @dataProvider getFormatToMimeTypeMapProvider
      */
     public function testGetFormatFromMimeType($format, $mimeTypes)
     {
@@ -416,14 +467,6 @@ class RequestTest extends TestCase
                 $this->assertEquals($mimeTypes[0], $request->getMimeType($format));
             }
         }
-    }
-
-    public function getFormatToMimeTypeMapProviderWithAdditionalNullFormat()
-    {
-        return array_merge(
-            [[null, [null, 'unexistent-mime-type']]],
-            $this->getFormatToMimeTypeMapProvider()
-        );
     }
 
     public function testGetFormatFromMimeTypeWithParameters()
@@ -466,7 +509,7 @@ class RequestTest extends TestCase
         $this->assertEquals('custom', $request->getFormat('application/vnd.foo.api;myversion=2.3'));
     }
 
-    public function getFormatToMimeTypeMapProvider()
+    public static function getFormatToMimeTypeMapProvider()
     {
         return [
             ['txt', ['text/plain']],
@@ -477,6 +520,7 @@ class RequestTest extends TestCase
             ['xml', ['text/xml', 'application/xml', 'application/x-xml']],
             ['rdf', ['application/rdf+xml']],
             ['atom', ['application/atom+xml']],
+            ['form', ['application/x-www-form-urlencoded', 'multipart/form-data']],
         ];
     }
 
@@ -703,14 +747,14 @@ class RequestTest extends TestCase
     }
 
     /**
-     * @dataProvider getRelativeUriForPathData()
+     * @dataProvider getRelativeUriForPathData
      */
     public function testGetRelativeUriForPath($expected, $pathinfo, $path)
     {
         $this->assertEquals($expected, Request::create($pathinfo)->getRelativeUriForPath($path));
     }
 
-    public function getRelativeUriForPathData()
+    public static function getRelativeUriForPathData()
     {
         return [
             ['me.png', '/foo', '/me.png'],
@@ -773,30 +817,36 @@ class RequestTest extends TestCase
         $this->assertSame($expectedQuery, $request->getQueryString(), $msg);
     }
 
-    public function getQueryStringNormalizationData()
+    public static function getQueryStringNormalizationData()
     {
         return [
-            ['foo', 'foo', 'works with valueless parameters'],
+            ['foo', 'foo=', 'works with valueless parameters'],
             ['foo=', 'foo=', 'includes a dangling equal sign'],
             ['bar=&foo=bar', 'bar=&foo=bar', '->works with empty parameters'],
             ['foo=bar&bar=', 'bar=&foo=bar', 'sorts keys alphabetically'],
 
-            // GET parameters, that are submitted from a HTML form, encode spaces as "+" by default (as defined in enctype application/x-www-form-urlencoded).
+            // GET parameters, that are submitted from an HTML form, encode spaces as "+" by default (as defined in enctype application/x-www-form-urlencoded).
             // PHP also converts "+" to spaces when filling the global _GET or when using the function parse_str.
             ['baz=Foo%20Baz&bar=Foo+Bar', 'bar=Foo%20Bar&baz=Foo%20Baz', 'normalizes spaces in both encodings "%20" and "+"'],
 
-            ['foo[]=1&foo[]=2', 'foo%5B%5D=1&foo%5B%5D=2', 'allows array notation'],
-            ['foo=1&foo=2', 'foo=1&foo=2', 'allows repeated parameters'],
+            ['foo[]=1&foo[]=2', 'foo%5B0%5D=1&foo%5B1%5D=2', 'allows array notation'],
+            ['foo=1&foo=2', 'foo=2', 'merges repeated parameters'],
             ['pa%3Dram=foo%26bar%3Dbaz&test=test', 'pa%3Dram=foo%26bar%3Dbaz&test=test', 'works with encoded delimiters'],
-            ['0', '0', 'allows "0"'],
-            ['Foo Bar&Foo%20Baz', 'Foo%20Bar&Foo%20Baz', 'normalizes encoding in keys'],
+            ['0', '0=', 'allows "0"'],
+            ['Foo Bar&Foo%20Baz', 'Foo%20Bar=&Foo%20Baz=', 'normalizes encoding in keys'],
             ['bar=Foo Bar&baz=Foo%20Baz', 'bar=Foo%20Bar&baz=Foo%20Baz', 'normalizes encoding in values'],
-            ['foo=bar&&&test&&', 'foo=bar&test', 'removes unneeded delimiters'],
+            ['foo=bar&&&test&&', 'foo=bar&test=', 'removes unneeded delimiters'],
             ['formula=e=m*c^2', 'formula=e%3Dm%2Ac%5E2', 'correctly treats only the first "=" as delimiter and the next as value'],
 
             // Ignore pairs with empty key, even if there was a value, e.g. "=value", as such nameless values cannot be retrieved anyway.
             // PHP also does not include them when building _GET.
             ['foo=bar&=a=b&=x=y', 'foo=bar', 'removes params with empty key'],
+
+            // Don't reorder nested query string keys
+            ['foo[]=Z&foo[]=A', 'foo%5B0%5D=Z&foo%5B1%5D=A', 'keeps order of values'],
+            ['foo[Z]=B&foo[A]=B', 'foo%5BZ%5D=B&foo%5BA%5D=B', 'keeps order of keys'],
+
+            ['utf8=✓', 'utf8=%E2%9C%93', 'encodes UTF-8'],
         ];
     }
 
@@ -842,7 +892,7 @@ class RequestTest extends TestCase
 
         $this->assertEquals(80, $port, 'Without trusted proxies FORWARDED_PROTO and FORWARDED_PORT are ignored.');
 
-        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_PROTO | Request::HEADER_X_FORWARDED_PORT);
         $request = Request::create('http://example.com', 'GET', [], [], [], [
             'HTTP_X_FORWARDED_PROTO' => 'https',
             'HTTP_X_FORWARDED_PORT' => '8443',
@@ -886,11 +936,9 @@ class RequestTest extends TestCase
         $this->assertEquals(80, $port, 'With only PROTO set and value is not recognized, getPort() defaults to 80.');
     }
 
-    /**
-     * @expectedException \RuntimeException
-     */
     public function testGetHostWithFakeHttpHostValue()
     {
+        $this->expectException(\RuntimeException::class);
         $request = new Request();
         $request->initialize([], [], [], [], [], ['HTTP_HOST' => 'www.host.com?query=string']);
         $request->getHost();
@@ -986,7 +1034,7 @@ class RequestTest extends TestCase
         $this->assertEquals($expected, $request->getClientIps());
     }
 
-    public function getClientIpsForwardedProvider()
+    public static function getClientIpsForwardedProvider()
     {
         //              $expected                                  $remoteAddr  $httpForwarded                                       $trustedProxies
         return [
@@ -994,12 +1042,12 @@ class RequestTest extends TestCase
             [['127.0.0.1'],                              '127.0.0.1', 'for="_gazonk"',                                      ['127.0.0.1']],
             [['88.88.88.88'],                            '127.0.0.1', 'for="88.88.88.88:80"',                               ['127.0.0.1']],
             [['192.0.2.60'],                             '::1',       'for=192.0.2.60;proto=http;by=203.0.113.43',          ['::1']],
-            [['2620:0:1cfe:face:b00c::3', '192.0.2.43'], '::1',       'for=192.0.2.43, for=2620:0:1cfe:face:b00c::3',       ['::1']],
+            [['2620:0:1cfe:face:b00c::3', '192.0.2.43'], '::1',       'for=192.0.2.43, for="[2620:0:1cfe:face:b00c::3]"',   ['::1']],
             [['2001:db8:cafe::17'],                      '::1',       'for="[2001:db8:cafe::17]:4711',                      ['::1']],
         ];
     }
 
-    public function getClientIpsProvider()
+    public static function getClientIpsProvider()
     {
         //        $expected                          $remoteAddr                 $httpForwardedFor            $trustedProxies
         return [
@@ -1025,7 +1073,7 @@ class RequestTest extends TestCase
             // forwarded for with remote IPv6 addr not trusted
             [['1620:0:1cfe:face:b00c::3'], '1620:0:1cfe:face:b00c::3', '2620:0:1cfe:face:b00c::3',  null],
             // forwarded for with remote IPv6 addr trusted
-            [['2620:0:1cfe:face:b00c::3'], '1620:0:1cfe:face:b00c::3', '2620:0:1cfe:face:b00c::3', ['1620:0:1cfe:face:b00c::3']],
+            [['2620:0:1cfe:face:b00c::3'], '1620:0:1cfe:face:b00c::3', '2620:0:1cfe:face:b00c::3',  ['1620:0:1cfe:face:b00c::3']],
             // forwarded for with remote IPv6 range trusted
             [['88.88.88.88'],              '2a01:198:603:0:396e:4789:8e99:890f', '88.88.88.88',     ['2a01:198:603:0::/65']],
 
@@ -1055,11 +1103,11 @@ class RequestTest extends TestCase
     }
 
     /**
-     * @expectedException \Symfony\Component\HttpFoundation\Exception\ConflictingHeadersException
      * @dataProvider getClientIpsWithConflictingHeadersProvider
      */
     public function testGetClientIpsWithConflictingHeaders($httpForwarded, $httpXForwardedFor)
     {
+        $this->expectException(ConflictingHeadersException::class);
         $request = new Request();
 
         $server = [
@@ -1068,7 +1116,7 @@ class RequestTest extends TestCase
             'HTTP_X_FORWARDED_FOR' => $httpXForwardedFor,
         ];
 
-        Request::setTrustedProxies(['88.88.88.88'], Request::HEADER_X_FORWARDED_ALL | Request::HEADER_FORWARDED);
+        Request::setTrustedProxies(['88.88.88.88'], Request::HEADER_X_FORWARDED_FOR | Request::HEADER_FORWARDED);
 
         $request->initialize([], [], [], [], [], $server);
 
@@ -1095,7 +1143,7 @@ class RequestTest extends TestCase
         $this->assertSame(array_reverse(explode(',', $httpXForwardedFor)), $request->getClientIps());
     }
 
-    public function getClientIpsWithConflictingHeadersProvider()
+    public static function getClientIpsWithConflictingHeadersProvider()
     {
         //        $httpForwarded                   $httpXForwardedFor
         return [
@@ -1129,7 +1177,7 @@ class RequestTest extends TestCase
         $this->assertSame($expectedIps, $clientIps);
     }
 
-    public function getClientIpsWithAgreeingHeadersProvider()
+    public static function getClientIpsWithAgreeingHeadersProvider()
     {
         //        $httpForwarded                               $httpXForwardedFor
         return [
@@ -1153,7 +1201,7 @@ class RequestTest extends TestCase
     {
         $req = new Request();
         $retval = $req->getContent(true);
-        $this->assertInternalType('resource', $retval);
+        $this->assertIsResource($retval);
         $this->assertEquals('', fread($retval, 1));
         $this->assertTrue(feof($retval));
     }
@@ -1163,7 +1211,7 @@ class RequestTest extends TestCase
         $req = new Request([], [], [], [], [], [], 'MyContent');
         $resource = $req->getContent(true);
 
-        $this->assertInternalType('resource', $resource);
+        $this->assertIsResource($resource);
         $this->assertEquals('MyContent', stream_get_contents($resource));
     }
 
@@ -1178,21 +1226,6 @@ class RequestTest extends TestCase
         $this->assertEquals('My other content', $req->getContent());
     }
 
-    /**
-     * @expectedException \LogicException
-     * @dataProvider getContentCantBeCalledTwiceWithResourcesProvider
-     */
-    public function testGetContentCantBeCalledTwiceWithResources($first, $second)
-    {
-        if (\PHP_VERSION_ID >= 50600) {
-            $this->markTestSkipped('PHP >= 5.6 allows to open php://input several times.');
-        }
-
-        $req = new Request();
-        $req->getContent($first);
-        $req->getContent($second);
-    }
-
     public function getContentCantBeCalledTwiceWithResourcesProvider()
     {
         return [
@@ -1203,7 +1236,6 @@ class RequestTest extends TestCase
 
     /**
      * @dataProvider getContentCanBeCalledTwiceWithResourcesProvider
-     * @requires PHP 5.6
      */
     public function testGetContentCanBeCalledTwiceWithResources($first, $second)
     {
@@ -1222,7 +1254,7 @@ class RequestTest extends TestCase
         $this->assertSame($a, $b);
     }
 
-    public function getContentCanBeCalledTwiceWithResourcesProvider()
+    public static function getContentCanBeCalledTwiceWithResourcesProvider()
     {
         return [
             'Fetch then fetch' => [false, false],
@@ -1232,7 +1264,7 @@ class RequestTest extends TestCase
         ];
     }
 
-    public function provideOverloadedMethods()
+    public static function provideOverloadedMethods()
     {
         return [
             ['PUT'],
@@ -1242,6 +1274,44 @@ class RequestTest extends TestCase
             ['delete'],
             ['patch'],
         ];
+    }
+
+    public function testToArrayEmpty()
+    {
+        $req = new Request();
+        $this->expectException(JsonException::class);
+        $this->expectExceptionMessage('Request body is empty.');
+        $req->toArray();
+    }
+
+    public function testToArrayNonJson()
+    {
+        $req = new Request([], [], [], [], [], [], 'foobar');
+        $this->expectException(JsonException::class);
+        $this->expectExceptionMessageMatches('|Could not decode request body.+|');
+        $req->toArray();
+    }
+
+    public function testToArray()
+    {
+        $req = new Request([], [], [], [], [], [], json_encode([]));
+        $this->assertEquals([], $req->toArray());
+        $req = new Request([], [], [], [], [], [], json_encode(['foo' => 'bar']));
+        $this->assertEquals(['foo' => 'bar'], $req->toArray());
+    }
+
+    public function testGetPayload()
+    {
+        $req = new Request([], [], [], [], [], [], json_encode(['foo' => 'bar']));
+        $this->assertSame(['foo' => 'bar'], $req->getPayload()->all());
+        $req->getPayload()->set('new', 'key');
+        $this->assertSame(['foo' => 'bar'], $req->getPayload()->all());
+
+        $req = new Request([], ['foo' => 'bar'], [], [], [], [], json_encode(['baz' => 'qux']));
+        $this->assertSame(['foo' => 'bar'], $req->getPayload()->all());
+
+        $req = new Request([], [], [], [], [], [], '');
+        $this->assertSame([], $req->getPayload()->all());
     }
 
     /**
@@ -1263,6 +1333,8 @@ class RequestTest extends TestCase
         $this->assertEquals('bar3', $request->cookies->get('foo3'), '::fromGlobals() uses values from $_COOKIE');
         $this->assertEquals(['bar4'], $request->files->get('foo4'), '::fromGlobals() uses values from $_FILES');
         $this->assertEquals('bar5', $request->server->get('foo5'), '::fromGlobals() uses values from $_SERVER');
+        $this->assertInstanceOf(InputBag::class, $request->request);
+        $this->assertInstanceOf(ParameterBag::class, $request->request);
 
         unset($_GET['foo1'], $_POST['foo2'], $_COOKIE['foo3'], $_FILES['foo4'], $_SERVER['foo5']);
 
@@ -1271,6 +1343,8 @@ class RequestTest extends TestCase
         $request = RequestContentProxy::createFromGlobals();
         $this->assertEquals($normalizedMethod, $request->getMethod());
         $this->assertEquals('mycontent', $request->request->get('content'));
+        $this->assertInstanceOf(InputBag::class, $request->request);
+        $this->assertInstanceOf(ParameterBag::class, $request->request);
 
         unset($_SERVER['REQUEST_METHOD'], $_SERVER['CONTENT_TYPE']);
 
@@ -1309,7 +1383,7 @@ class RequestTest extends TestCase
 
         $request->headers->set('X_FORWARDED_PROTO', 'https');
 
-        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_PROTO);
         $this->assertFalse($request->isSecure());
         $request->server->set('REMOTE_ADDR', '1.1.1.1');
         $this->assertTrue($request->isSecure());
@@ -1551,7 +1625,6 @@ class RequestTest extends TestCase
         $request = new Request();
         $request->headers->set('Accept-language', 'zh, en-us; q=0.8, en; q=0.6');
         $this->assertEquals(['zh', 'en_US', 'en'], $request->getLanguages());
-        $this->assertEquals(['zh', 'en_US', 'en'], $request->getLanguages());
 
         $request = new Request();
         $request->headers->set('Accept-language', 'zh, en-us; q=0.6, en; q=0.8');
@@ -1568,6 +1641,20 @@ class RequestTest extends TestCase
         $request = new Request();
         $request->headers->set('Accept-language', 'zh, i-cherokee; q=0.6');
         $this->assertEquals(['zh', 'cherokee'], $request->getLanguages());
+    }
+
+    public function testGetAcceptHeadersReturnString()
+    {
+        $request = new Request();
+        $request->headers->set('Accept', '123');
+        $request->headers->set('Accept-Charset', '123');
+        $request->headers->set('Accept-Encoding', '123');
+        $request->headers->set('Accept-Language', '123');
+
+        $this->assertSame(['123'], $request->getAcceptableContentTypes());
+        $this->assertSame(['123'], $request->getCharsets());
+        $this->assertSame(['123'], $request->getEncodings());
+        $this->assertSame(['123'], $request->getLanguages());
     }
 
     public function testGetRequestFormat()
@@ -1596,8 +1683,15 @@ class RequestTest extends TestCase
         $request = new Request();
 
         $this->assertFalse($request->hasSession());
+        $this->assertFalse($request->hasSession(true));
+
+        $request->setSessionFactory(function () {});
+        $this->assertTrue($request->hasSession());
+        $this->assertFalse($request->hasSession(true));
+
         $request->setSession(new Session(new MockArraySessionStorage()));
         $this->assertTrue($request->hasSession());
+        $this->assertTrue($request->hasSession(true));
     }
 
     public function testGetSession()
@@ -1607,10 +1701,7 @@ class RequestTest extends TestCase
         $request->setSession(new Session(new MockArraySessionStorage()));
         $this->assertTrue($request->hasSession());
 
-        $session = $request->getSession();
-        $this->assertObjectHasAttribute('storage', $session);
-        $this->assertObjectHasAttribute('flashName', $session);
-        $this->assertObjectHasAttribute('attributeName', $session);
+        $this->assertInstanceOf(Session::class, $request->getSession());
     }
 
     public function testHasPreviousSession()
@@ -1633,14 +1724,20 @@ class RequestTest extends TestCase
 
         $asString = (string) $request;
 
-        $this->assertContains('Accept-Language: zh, en-us; q=0.8, en; q=0.6', $asString);
-        $this->assertContains('Cookie: Foo=Bar', $asString);
+        $this->assertStringContainsString('Accept-Language: zh, en-us; q=0.8, en; q=0.6', $asString);
+        $this->assertStringContainsString('Cookie: Foo=Bar', $asString);
 
         $request->cookies->set('Another', 'Cookie');
 
         $asString = (string) $request;
 
-        $this->assertContains('Cookie: Foo=Bar; Another=Cookie', $asString);
+        $this->assertStringContainsString('Cookie: Foo=Bar; Another=Cookie', $asString);
+
+        $request->cookies->set('foo.bar', [1, 2]);
+
+        $asString = (string) $request;
+
+        $this->assertStringContainsString('foo.bar%5B0%5D=1; foo.bar%5B1%5D=2', $asString);
     }
 
     public function testIsMethod()
@@ -1670,7 +1767,7 @@ class RequestTest extends TestCase
         $this->assertSame($expectedPathInfo, $request->getPathInfo(), 'pathInfo');
     }
 
-    public function getBaseUrlData()
+    public static function getBaseUrlData()
     {
         return [
             [
@@ -1743,6 +1840,102 @@ class RequestTest extends TestCase
                 '/foo',
                 '/bar+baz',
             ],
+            [
+                '/sub/foo/bar',
+                [
+                    'SCRIPT_FILENAME' => '/home/John Doe/public_html/foo/app.php',
+                    'SCRIPT_NAME' => '/foo/app.php',
+                    'PHP_SELF' => '/foo/app.php',
+                ],
+                '',
+                '/sub/foo/bar',
+            ],
+            [
+                '/sub/foo/app.php/bar',
+                [
+                    'SCRIPT_FILENAME' => '/home/John Doe/public_html/foo/app.php',
+                    'SCRIPT_NAME' => '/foo/app.php',
+                    'PHP_SELF' => '/foo/app.php',
+                ],
+                '/sub/foo/app.php',
+                '/bar',
+            ],
+            [
+                '/sub/foo/bar/baz',
+                [
+                    'SCRIPT_FILENAME' => '/home/John Doe/public_html/foo/app2.phpx',
+                    'SCRIPT_NAME' => '/foo/app2.phpx',
+                    'PHP_SELF' => '/foo/app2.phpx',
+                ],
+                '',
+                '/sub/foo/bar/baz',
+            ],
+            [
+                '/foo/api/bar',
+                [
+                    'SCRIPT_FILENAME' => '/var/www/api/index.php',
+                    'SCRIPT_NAME' => '/api/index.php',
+                    'PHP_SELF' => '/api/index.php',
+                ],
+                '',
+                '/foo/api/bar',
+            ],
+        ];
+    }
+
+    /**
+     * @dataProvider baseUriDetectionOnIisWithRewriteData
+     */
+    public function testBaseUriDetectionOnIisWithRewrite(array $server, string $expectedBaseUrl, string $expectedPathInfo)
+    {
+        $request = new Request([], [], [], [], [], $server);
+
+        self::assertSame($expectedBaseUrl, $request->getBaseUrl());
+        self::assertSame($expectedPathInfo, $request->getPathInfo());
+    }
+
+    public static function baseUriDetectionOnIisWithRewriteData(): \Generator
+    {
+        yield 'No rewrite' => [
+            [
+                'PATH_INFO' => '/foo/bar',
+                'PHP_SELF' => '/routingtest/index.php/foo/bar',
+                'REQUEST_URI' => '/routingtest/index.php/foo/bar',
+                'SCRIPT_FILENAME' => 'C:/Users/derrabus/Projects/routing-test/public/index.php',
+                'SCRIPT_NAME' => '/routingtest/index.php',
+            ],
+            '/routingtest/index.php',
+            '/foo/bar',
+        ];
+
+        yield 'Rewrite with correct case' => [
+            [
+                'IIS_WasUrlRewritten' => '1',
+                'PATH_INFO' => '/foo/bar',
+                'PHP_SELF' => '/routingtest/index.php/foo/bar',
+                'REQUEST_URI' => '/routingtest/foo/bar',
+                'SCRIPT_FILENAME' => 'C:/Users/derrabus/Projects/routing-test/public/index.php',
+                'SCRIPT_NAME' => '/routingtest/index.php',
+                'UNENCODED_URL' => '/routingtest/foo/bar',
+            ],
+            '/routingtest',
+            '/foo/bar',
+        ];
+
+        // ISS with UrlRewriteModule might report SCRIPT_NAME/PHP_SELF with wrong case
+        // see https://github.com/php/php-src/issues/11981
+        yield 'Rewrite with case mismatch' => [
+            [
+                'IIS_WasUrlRewritten' => '1',
+                'PATH_INFO' => '/foo/bar',
+                'PHP_SELF' => '/routingtest/index.php/foo/bar',
+                'REQUEST_URI' => '/RoutingTest/foo/bar',
+                'SCRIPT_FILENAME' => 'C:/Users/derrabus/Projects/routing-test/public/index.php',
+                'SCRIPT_NAME' => '/routingtest/index.php',
+                'UNENCODED_URL' => '/RoutingTest/foo/bar',
+            ],
+            '/RoutingTest',
+            '/foo/bar',
         ];
     }
 
@@ -1754,12 +1947,11 @@ class RequestTest extends TestCase
         $request = new Request();
 
         $me = new \ReflectionMethod($request, 'getUrlencodedPrefix');
-        $me->setAccessible(true);
 
         $this->assertSame($expect, $me->invoke($request, $string, $prefix));
     }
 
-    public function urlencodedStringPrefixData()
+    public static function urlencodedStringPrefixData()
     {
         return [
             ['foo', 'foo', 'foo'],
@@ -1775,13 +1967,12 @@ class RequestTest extends TestCase
 
     private function disableHttpMethodParameterOverride()
     {
-        $class = new \ReflectionClass('Symfony\\Component\\HttpFoundation\\Request');
+        $class = new \ReflectionClass(Request::class);
         $property = $class->getProperty('httpMethodParameterOverride');
-        $property->setAccessible(true);
-        $property->setValue(false);
+        $property->setValue(null, false);
     }
 
-    private function getRequestInstanceForClientIpTests($remoteAddr, $httpForwardedFor, $trustedProxies)
+    private function getRequestInstanceForClientIpTests(string $remoteAddr, ?string $httpForwardedFor, ?array $trustedProxies): Request
     {
         $request = new Request();
 
@@ -1791,7 +1982,7 @@ class RequestTest extends TestCase
         }
 
         if ($trustedProxies) {
-            Request::setTrustedProxies($trustedProxies, Request::HEADER_X_FORWARDED_ALL);
+            Request::setTrustedProxies($trustedProxies, Request::HEADER_X_FORWARDED_FOR);
         }
 
         $request->initialize([], [], [], [], [], $server);
@@ -1799,7 +1990,7 @@ class RequestTest extends TestCase
         return $request;
     }
 
-    private function getRequestInstanceForClientIpsForwardedTests($remoteAddr, $httpForwarded, $trustedProxies)
+    private function getRequestInstanceForClientIpsForwardedTests(string $remoteAddr, ?string $httpForwarded, ?array $trustedProxies): Request
     {
         $request = new Request();
 
@@ -1834,87 +2025,40 @@ class RequestTest extends TestCase
         $this->assertFalse($request->isSecure());
 
         // disabling proxy trusting
-        Request::setTrustedProxies([], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies([], Request::HEADER_X_FORWARDED_FOR);
         $this->assertEquals('3.3.3.3', $request->getClientIp());
         $this->assertEquals('example.com', $request->getHost());
         $this->assertEquals(80, $request->getPort());
         $this->assertFalse($request->isSecure());
 
         // request is forwarded by a non-trusted proxy
-        Request::setTrustedProxies(['2.2.2.2'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['2.2.2.2'], Request::HEADER_X_FORWARDED_FOR);
         $this->assertEquals('3.3.3.3', $request->getClientIp());
         $this->assertEquals('example.com', $request->getHost());
         $this->assertEquals(80, $request->getPort());
         $this->assertFalse($request->isSecure());
 
         // trusted proxy via setTrustedProxies()
-        Request::setTrustedProxies(['3.3.3.3', '2.2.2.2'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['3.3.3.3', '2.2.2.2'], Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO);
         $this->assertEquals('1.1.1.1', $request->getClientIp());
         $this->assertEquals('foo.example.com', $request->getHost());
         $this->assertEquals(443, $request->getPort());
         $this->assertTrue($request->isSecure());
 
         // trusted proxy via setTrustedProxies()
-        Request::setTrustedProxies(['3.3.3.4', '2.2.2.2'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['3.3.3.4', '2.2.2.2'], Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO);
         $this->assertEquals('3.3.3.3', $request->getClientIp());
         $this->assertEquals('example.com', $request->getHost());
         $this->assertEquals(80, $request->getPort());
         $this->assertFalse($request->isSecure());
 
         // check various X_FORWARDED_PROTO header values
-        Request::setTrustedProxies(['3.3.3.3', '2.2.2.2'], Request::HEADER_X_FORWARDED_ALL);
+        Request::setTrustedProxies(['3.3.3.3', '2.2.2.2'], Request::HEADER_X_FORWARDED_PROTO);
         $request->headers->set('X_FORWARDED_PROTO', 'ssl');
         $this->assertTrue($request->isSecure());
 
         $request->headers->set('X_FORWARDED_PROTO', 'https, http');
         $this->assertTrue($request->isSecure());
-    }
-
-    /**
-     * @group legacy
-     * @expectedDeprecation The "Symfony\Component\HttpFoundation\Request::setTrustedHeaderName()" method is deprecated since Symfony 3.3 and will be removed in 4.0. Use the $trustedHeaderSet argument of the Request::setTrustedProxies() method instead.
-     */
-    public function testLegacyTrustedProxies()
-    {
-        $request = Request::create('http://example.com/');
-        $request->server->set('REMOTE_ADDR', '3.3.3.3');
-        $request->headers->set('X_FORWARDED_FOR', '1.1.1.1, 2.2.2.2');
-        $request->headers->set('X_FORWARDED_HOST', 'foo.example.com, real.example.com:8080');
-        $request->headers->set('X_FORWARDED_PROTO', 'https');
-        $request->headers->set('X_FORWARDED_PORT', 443);
-        $request->headers->set('X_MY_FOR', '3.3.3.3, 4.4.4.4');
-        $request->headers->set('X_MY_HOST', 'my.example.com');
-        $request->headers->set('X_MY_PROTO', 'http');
-        $request->headers->set('X_MY_PORT', 81);
-
-        Request::setTrustedProxies(['3.3.3.3', '2.2.2.2'], Request::HEADER_X_FORWARDED_ALL);
-
-        // custom header names
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, 'X_MY_FOR');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_HOST, 'X_MY_HOST');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PORT, 'X_MY_PORT');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PROTO, 'X_MY_PROTO');
-        $this->assertEquals('4.4.4.4', $request->getClientIp());
-        $this->assertEquals('my.example.com', $request->getHost());
-        $this->assertEquals(81, $request->getPort());
-        $this->assertFalse($request->isSecure());
-
-        // disabling via empty header names
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, null);
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_HOST, null);
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PORT, null);
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PROTO, null);
-        $this->assertEquals('3.3.3.3', $request->getClientIp());
-        $this->assertEquals('example.com', $request->getHost());
-        $this->assertEquals(80, $request->getPort());
-        $this->assertFalse($request->isSecure());
-
-        //reset
-        Request::setTrustedHeaderName(Request::HEADER_FORWARDED, 'FORWARDED');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, 'X_FORWARDED_FOR');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_HOST, 'X_FORWARDED_HOST');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PORT, 'X_FORWARDED_PORT');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PROTO, 'X_FORWARDED_PROTO');
     }
 
     public function testTrustedProxiesForwarded()
@@ -1967,26 +2111,6 @@ class RequestTest extends TestCase
     }
 
     /**
-     * @group legacy
-     * @expectedException \InvalidArgumentException
-     */
-    public function testSetTrustedProxiesInvalidHeaderName()
-    {
-        Request::create('http://example.com/');
-        Request::setTrustedHeaderName('bogus name', 'X_MY_FOR');
-    }
-
-    /**
-     * @group legacy
-     * @expectedException \InvalidArgumentException
-     */
-    public function testGetTrustedProxiesInvalidHeaderName()
-    {
-        Request::create('http://example.com/');
-        Request::getTrustedHeaderName('bogus name');
-    }
-
-    /**
      * @dataProvider iisRequestUriProvider
      */
     public function testIISRequestUri($headers, $server, $expectedRequestUri)
@@ -2002,7 +2126,7 @@ class RequestTest extends TestCase
         $this->assertEquals($subRequestUri, $subRequest->getRequestUri(), '->getRequestUri() is correct in sub request');
     }
 
-    public function iisRequestUriProvider()
+    public static function iisRequestUriProvider()
     {
         return [
             [
@@ -2082,9 +2206,7 @@ class RequestTest extends TestCase
 
     public function testFactory()
     {
-        Request::setFactory(function (array $query = [], array $request = [], array $attributes = [], array $cookies = [], array $files = [], array $server = [], $content = null) {
-            return new NewRequest();
-        });
+        Request::setFactory(fn (array $query = [], array $request = [], array $attributes = [], array $cookies = [], array $files = [], array $server = [], $content = null) => new NewRequest());
 
         $this->assertEquals('foo', Request::create('/')->getFoo());
 
@@ -2118,18 +2240,14 @@ class RequestTest extends TestCase
                 $this->assertSame($expectedPort, $request->getPort());
             }
         } else {
-            if (method_exists($this, 'expectException')) {
-                $this->expectException(SuspiciousOperationException::class);
-                $this->expectExceptionMessage('Invalid Host');
-            } else {
-                $this->setExpectedException(SuspiciousOperationException::class, 'Invalid Host');
-            }
+            $this->expectException(SuspiciousOperationException::class);
+            $this->expectExceptionMessage('Invalid Host');
 
             $request->getHost();
         }
     }
 
-    public function getHostValidities()
+    public static function getHostValidities()
     {
         return [
             ['.a', false],
@@ -2142,7 +2260,7 @@ class RequestTest extends TestCase
         ];
     }
 
-    public function getLongHostNames()
+    public static function getLongHostNames()
     {
         return [
             ['a'.str_repeat('.a', 40000)],
@@ -2160,7 +2278,7 @@ class RequestTest extends TestCase
         $this->assertEquals($idempotent, $request->isMethodIdempotent());
     }
 
-    public function methodIdempotentProvider()
+    public static function methodIdempotentProvider()
     {
         return [
             ['HEAD', true],
@@ -2183,10 +2301,10 @@ class RequestTest extends TestCase
     {
         $request = new Request();
         $request->setMethod($method);
-        $this->assertEquals($safe, $request->isMethodSafe(false));
+        $this->assertEquals($safe, $request->isMethodSafe());
     }
 
-    public function methodSafeProvider()
+    public static function methodSafeProvider()
     {
         return [
             ['HEAD', true],
@@ -2203,17 +2321,6 @@ class RequestTest extends TestCase
     }
 
     /**
-     * @group legacy
-     * @expectedDeprecation Checking only for cacheable HTTP methods with Symfony\Component\HttpFoundation\Request::isMethodSafe() is deprecated since Symfony 3.2 and will throw an exception in 4.0. Disable checking only for cacheable methods by calling the method with `false` as first argument or use the Request::isMethodCacheable() instead.
-     */
-    public function testMethodSafeChecksCacheable()
-    {
-        $request = new Request();
-        $request->setMethod('OPTIONS');
-        $this->assertFalse($request->isMethodSafe());
-    }
-
-    /**
      * @dataProvider methodCacheableProvider
      */
     public function testMethodCacheable($method, $cacheable)
@@ -2223,7 +2330,7 @@ class RequestTest extends TestCase
         $this->assertEquals($cacheable, $request->isMethodCacheable());
     }
 
-    public function methodCacheableProvider()
+    public static function methodCacheableProvider()
     {
         return [
             ['HEAD', true],
@@ -2240,61 +2347,6 @@ class RequestTest extends TestCase
     }
 
     /**
-     * @group legacy
-     */
-    public function testGetTrustedHeaderName()
-    {
-        Request::setTrustedProxies(['8.8.8.8'], Request::HEADER_X_FORWARDED_ALL);
-
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_FORWARDED));
-        $this->assertSame('X_FORWARDED_FOR', Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP));
-        $this->assertSame('X_FORWARDED_HOST', Request::getTrustedHeaderName(Request::HEADER_CLIENT_HOST));
-        $this->assertSame('X_FORWARDED_PORT', Request::getTrustedHeaderName(Request::HEADER_CLIENT_PORT));
-        $this->assertSame('X_FORWARDED_PROTO', Request::getTrustedHeaderName(Request::HEADER_CLIENT_PROTO));
-
-        Request::setTrustedProxies(['8.8.8.8'], Request::HEADER_FORWARDED);
-
-        $this->assertSame('FORWARDED', Request::getTrustedHeaderName(Request::HEADER_FORWARDED));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_HOST));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_PORT));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_PROTO));
-
-        Request::setTrustedHeaderName(Request::HEADER_FORWARDED, 'A');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, 'B');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_HOST, 'C');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PORT, 'D');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PROTO, 'E');
-
-        Request::setTrustedProxies(['8.8.8.8'], Request::HEADER_FORWARDED);
-
-        $this->assertSame('A', Request::getTrustedHeaderName(Request::HEADER_FORWARDED));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_HOST));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_PORT));
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_CLIENT_PROTO));
-
-        Request::setTrustedProxies(['8.8.8.8'], Request::HEADER_X_FORWARDED_ALL);
-
-        $this->assertNull(Request::getTrustedHeaderName(Request::HEADER_FORWARDED));
-        $this->assertSame('B', Request::getTrustedHeaderName(Request::HEADER_CLIENT_IP));
-        $this->assertSame('C', Request::getTrustedHeaderName(Request::HEADER_CLIENT_HOST));
-        $this->assertSame('D', Request::getTrustedHeaderName(Request::HEADER_CLIENT_PORT));
-        $this->assertSame('E', Request::getTrustedHeaderName(Request::HEADER_CLIENT_PROTO));
-
-        Request::setTrustedProxies(['8.8.8.8'], Request::HEADER_FORWARDED);
-
-        $this->assertSame('A', Request::getTrustedHeaderName(Request::HEADER_FORWARDED));
-
-        //reset
-        Request::setTrustedHeaderName(Request::HEADER_FORWARDED, 'FORWARDED');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_IP, 'X_FORWARDED_FOR');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_HOST, 'X_FORWARDED_HOST');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PORT, 'X_FORWARDED_PORT');
-        Request::setTrustedHeaderName(Request::HEADER_CLIENT_PROTO, 'X_FORWARDED_PROTO');
-    }
-
-    /**
      * @dataProvider protocolVersionProvider
      */
     public function testProtocolVersion($serverProtocol, $trustedProxy, $via, $expected)
@@ -2306,17 +2358,22 @@ class RequestTest extends TestCase
         $request = new Request();
         $request->server->set('SERVER_PROTOCOL', $serverProtocol);
         $request->server->set('REMOTE_ADDR', '1.1.1.1');
-        $request->headers->set('Via', $via);
+
+        if (null !== $via) {
+            $request->headers->set('Via', $via);
+        }
 
         $this->assertSame($expected, $request->getProtocolVersion());
     }
 
-    public function protocolVersionProvider()
+    public static function protocolVersionProvider()
     {
         return [
-            'untrusted without via' => ['HTTP/2.0', false, '', 'HTTP/2.0'],
+            'untrusted with empty via' => ['HTTP/2.0', false, '', 'HTTP/2.0'],
+            'untrusted without via' => ['HTTP/2.0', false, null, 'HTTP/2.0'],
             'untrusted with via' => ['HTTP/2.0', false, '1.0 fred, 1.1 nowhere.com (Apache/1.1)', 'HTTP/2.0'],
-            'trusted without via' => ['HTTP/2.0', true, '', 'HTTP/2.0'],
+            'trusted with empty via' => ['HTTP/2.0', true, '', 'HTTP/2.0'],
+            'trusted without via' => ['HTTP/2.0', true, null, 'HTTP/2.0'],
             'trusted with via' => ['HTTP/2.0', true, '1.0 fred, 1.1 nowhere.com (Apache/1.1)', 'HTTP/1.0'],
             'trusted with via and protocol name' => ['HTTP/2.0', true, 'HTTP/1.0 fred, HTTP/1.1 nowhere.com (Apache/1.1)', 'HTTP/1.0'],
             'trusted with broken via' => ['HTTP/2.0', true, 'HTTP/1^0 foo', 'HTTP/2.0'],
@@ -2324,7 +2381,7 @@ class RequestTest extends TestCase
         ];
     }
 
-    public function nonstandardRequestsData()
+    public static function nonstandardRequestsData()
     {
         return [
             ['',  '', '/', 'http://host:8080/', ''],
@@ -2355,9 +2412,7 @@ class RequestTest extends TestCase
      */
     public function testNonstandardRequests($requestUri, $queryString, $expectedPathInfo, $expectedUri, $expectedBasePath = '', $expectedBaseUrl = null)
     {
-        if (null === $expectedBaseUrl) {
-            $expectedBaseUrl = $expectedBasePath;
-        }
+        $expectedBaseUrl ??= $expectedBasePath;
 
         $server = [
             'HTTP_HOST' => 'host:8080',
@@ -2401,6 +2456,51 @@ class RequestTest extends TestCase
         $this->assertSame(443, $request->getPort());
     }
 
+    public function testTrustedPrefix()
+    {
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_TRAEFIK);
+
+        // test with index deployed under root
+        $request = Request::create('/method');
+        $request->server->set('REMOTE_ADDR', '1.1.1.1');
+        $request->headers->set('X-Forwarded-Prefix', '/myprefix');
+        $request->headers->set('Forwarded', 'host=localhost:8080');
+
+        $this->assertSame('/myprefix', $request->getBaseUrl());
+        $this->assertSame('/myprefix', $request->getBasePath());
+        $this->assertSame('/method', $request->getPathInfo());
+    }
+
+    public function testTrustedPrefixWithSubdir()
+    {
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_TRAEFIK);
+
+        $server = [
+            'SCRIPT_FILENAME' => '/var/hidden/app/public/public/index.php',
+            'SCRIPT_NAME' => '/public/index.php',
+            'PHP_SELF' => '/public/index.php',
+        ];
+
+        // test with index file deployed in subdir, i.e. local dev server (insecure!!)
+        $request = Request::create('/public/method', 'GET', [], [], [], $server);
+        $request->server->set('REMOTE_ADDR', '1.1.1.1');
+        $request->headers->set('X-Forwarded-Prefix', '/prefix');
+        $request->headers->set('Forwarded', 'host=localhost:8080');
+
+        $this->assertSame('/prefix/public', $request->getBaseUrl());
+        $this->assertSame('/prefix/public', $request->getBasePath());
+        $this->assertSame('/method', $request->getPathInfo());
+    }
+
+    public function testTrustedPrefixEmpty()
+    {
+        // check that there is no error, if no prefix is provided
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_TRAEFIK);
+        $request = Request::create('/method');
+        $request->server->set('REMOTE_ADDR', '1.1.1.1');
+        $this->assertSame('', $request->getBaseUrl());
+    }
+
     public function testTrustedPort()
     {
         Request::setTrustedProxies(['1.1.1.1'], -1);
@@ -2426,6 +2526,112 @@ class RequestTest extends TestCase
         $request->headers->set('X-Forwarded-Port', 443);
 
         $this->assertSame(443, $request->getPort());
+    }
+
+    public function testTrustedPortDoesNotDefaultToZero()
+    {
+        Request::setTrustedProxies(['1.1.1.1'], Request::HEADER_X_FORWARDED_FOR);
+
+        $request = Request::create('/');
+        $request->server->set('REMOTE_ADDR', '1.1.1.1');
+        $request->headers->set('X-Forwarded-Host', 'test.example.com');
+        $request->headers->set('X-Forwarded-Port', '');
+
+        $this->assertSame(80, $request->getPort());
+    }
+
+    /**
+     * @dataProvider trustedProxiesRemoteAddr
+     */
+    public function testTrustedProxiesRemoteAddr($serverRemoteAddr, $trustedProxies, $result)
+    {
+        $_SERVER['REMOTE_ADDR'] = $serverRemoteAddr;
+        Request::setTrustedProxies($trustedProxies, Request::HEADER_X_FORWARDED_FOR);
+        $this->assertSame($result, Request::getTrustedProxies());
+    }
+
+    public static function trustedProxiesRemoteAddr()
+    {
+        return [
+            ['1.1.1.1', ['REMOTE_ADDR'], ['1.1.1.1']],
+            ['1.1.1.1', ['REMOTE_ADDR', '2.2.2.2'], ['1.1.1.1', '2.2.2.2']],
+            [null, ['REMOTE_ADDR'], []],
+            [null, ['REMOTE_ADDR', '2.2.2.2'], ['2.2.2.2']],
+        ];
+    }
+
+    /**
+     * @dataProvider preferSafeContentData
+     */
+    public function testPreferSafeContent($server, bool $safePreferenceExpected)
+    {
+        $request = new Request([], [], [], [], [], $server);
+
+        $this->assertEquals($safePreferenceExpected, $request->preferSafeContent());
+    }
+
+    public static function preferSafeContentData()
+    {
+        return [
+            [[], false],
+            [
+                [
+                    'HTTPS' => 'on',
+                ],
+                false,
+            ],
+            [
+                [
+                    'HTTPS' => 'off',
+                    'HTTP_PREFER' => 'safe',
+                ],
+                false,
+            ],
+            [
+                [
+                    'HTTPS' => 'on',
+                    'HTTP_PREFER' => 'safe',
+                ],
+                true,
+            ],
+            [
+                [
+                    'HTTPS' => 'on',
+                    'HTTP_PREFER' => 'unknown-preference',
+                ],
+                false,
+            ],
+            [
+                [
+                    'HTTPS' => 'on',
+                    'HTTP_PREFER' => 'unknown-preference=42, safe',
+                ],
+                true,
+            ],
+            [
+                [
+                    'HTTPS' => 'on',
+                    'HTTP_PREFER' => 'safe, unknown-preference=42',
+                ],
+                true,
+            ],
+        ];
+    }
+
+    public function testReservedFlags()
+    {
+        foreach ((new \ReflectionClass(Request::class))->getConstants() as $constant => $value) {
+            $this->assertNotSame(0b10000000, $value, sprintf('The constant "%s" should not use the reserved value "0b10000000".', $constant));
+        }
+    }
+
+    /**
+     * @group legacy
+     */
+    public function testInvalidUriCreationDeprecated()
+    {
+        $this->expectDeprecation('Since symfony/http-foundation 6.3: Calling "Symfony\Component\HttpFoundation\Request::create()" with an invalid URI is deprecated.');
+        Request::create('/invalid-path:123');
     }
 }
 

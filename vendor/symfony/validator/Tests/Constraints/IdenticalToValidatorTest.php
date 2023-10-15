@@ -11,79 +11,86 @@
 
 namespace Symfony\Component\Validator\Tests\Constraints;
 
+use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\Constraints\IdenticalTo;
 use Symfony\Component\Validator\Constraints\IdenticalToValidator;
-use Symfony\Component\Validator\Validation;
 
 /**
  * @author Daniel Holmes <daniel@danielholmes.org>
  */
 class IdenticalToValidatorTest extends AbstractComparisonValidatorTestCase
 {
-    protected function getApiVersion()
-    {
-        return Validation::API_VERSION_2_5;
-    }
-
-    protected function createValidator()
+    protected function createValidator(): IdenticalToValidator
     {
         return new IdenticalToValidator();
     }
 
-    protected function createConstraint(array $options = null)
+    protected static function createConstraint(array $options = null): Constraint
     {
         return new IdenticalTo($options);
     }
 
-    public function provideAllValidComparisons()
+    protected function getErrorCode(): ?string
     {
-        $this->setDefaultTimezone('UTC');
+        return IdenticalTo::NOT_IDENTICAL_ERROR;
+    }
+
+    public static function provideAllValidComparisons(): array
+    {
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('UTC');
 
         // Don't call addPhp5Dot5Comparisons() automatically, as it does
         // not take care of identical objects
-        $comparisons = $this->provideValidComparisons();
+        $comparisons = self::provideValidComparisons();
 
-        $this->restoreDefaultTimezone();
+        date_default_timezone_set($timezone);
 
         return $comparisons;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideValidComparisons()
+    public static function provideValidComparisons(): array
     {
         $date = new \DateTime('2000-01-01');
         $object = new ComparisonTest_Class(2);
 
-        $comparisons = array(
-            array(3, 3),
-            array('a', 'a'),
-            array($date, $date),
-            array($object, $object),
-            array(null, 1),
-        );
+        $comparisons = [
+            [3, 3],
+            ['a', 'a'],
+            [$date, $date],
+            [$object, $object],
+            [null, 1],
+        ];
 
-        if (\PHP_VERSION_ID >= 50500) {
-            $immutableDate = new \DateTimeImmutable('2000-01-01');
-            $comparisons[] = array($immutableDate, $immutableDate);
-        }
+        $immutableDate = new \DateTimeImmutable('2000-01-01');
+        $comparisons[] = [$immutableDate, $immutableDate];
 
         return $comparisons;
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function provideInvalidComparisons()
+    public static function provideValidComparisonsToPropertyPath(): array
     {
-        return array(
-            array(1, '1', 2, '2', 'integer'),
-            array(2, '2', '2', '"2"', 'string'),
-            array('22', '"22"', '333', '"333"', 'string'),
-            array(new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', 'DateTime'),
-            array(new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', new \DateTime('1999-01-01'), 'Jan 1, 1999, 12:00 AM', 'DateTime'),
-            array(new ComparisonTest_Class(4), '4', new ComparisonTest_Class(5), '5', __NAMESPACE__.'\ComparisonTest_Class'),
-        );
+        return [
+            [5],
+        ];
+    }
+
+    public static function provideInvalidComparisons(): array
+    {
+        return [
+            [1, '1', 2, '2', 'int'],
+            [2, '2', '2', '"2"', 'string'],
+            ['22', '"22"', '333', '"333"', 'string'],
+            [new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', 'DateTime'],
+            [new \DateTime('2001-01-01'), 'Jan 1, 2001, 12:00 AM', new \DateTime('1999-01-01'), 'Jan 1, 1999, 12:00 AM', 'DateTime'],
+            [new ComparisonTest_Class(4), '4', new ComparisonTest_Class(5), '5', __NAMESPACE__.'\ComparisonTest_Class'],
+        ];
+    }
+
+    public static function provideComparisonsToNullValueAtPropertyPath()
+    {
+        return [
+            [5, '5', false],
+        ];
     }
 }

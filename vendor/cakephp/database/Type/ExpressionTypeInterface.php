@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 /**
  * CakePHP(tm) : Rapid Development Framework (https://cakephp.org)
  * Copyright (c) Cake Software Foundation, Inc. (https://cakefoundation.org)
@@ -14,6 +16,8 @@
  */
 namespace Cake\Database\Type;
 
+use Cake\Database\ExpressionInterface;
+
 /**
  * An interface used by Type objects to signal whether the value should
  * be converted to an ExpressionInterface instead of a string when sent
@@ -21,7 +25,6 @@ namespace Cake\Database\Type;
  */
 interface ExpressionTypeInterface
 {
-
     /**
      * Returns an ExpressionInterface object for the given value that can
      * be used in queries.
@@ -29,5 +32,5 @@ interface ExpressionTypeInterface
      * @param mixed $value The value to be converted to an expression
      * @return \Cake\Database\ExpressionInterface
      */
-    public function toExpression($value);
+    public function toExpression(mixed $value): ExpressionInterface;
 }

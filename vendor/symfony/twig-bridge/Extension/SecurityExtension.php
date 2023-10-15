@@ -13,6 +13,8 @@ namespace Symfony\Bridge\Twig\Extension;
 
 use Symfony\Component\Security\Acl\Voter\FieldVote;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\AuthenticationCredentialsNotFoundException;
+use Symfony\Component\Security\Http\Impersonate\ImpersonateUrlGenerator;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 
@@ -21,16 +23,18 @@ use Twig\TwigFunction;
  *
  * @author Fabien Potencier <fabien@symfony.com>
  */
-class SecurityExtension extends AbstractExtension
+final class SecurityExtension extends AbstractExtension
 {
-    private $securityChecker;
+    private ?AuthorizationCheckerInterface $securityChecker;
+    private ?ImpersonateUrlGenerator $impersonateUrlGenerator;
 
-    public function __construct(AuthorizationCheckerInterface $securityChecker = null)
+    public function __construct(AuthorizationCheckerInterface $securityChecker = null, ImpersonateUrlGenerator $impersonateUrlGenerator = null)
     {
         $this->securityChecker = $securityChecker;
+        $this->impersonateUrlGenerator = $impersonateUrlGenerator;
     }
 
-    public function isGranted($role, $object = null, $field = null)
+    public function isGranted(mixed $role, mixed $object = null, string $field = null): bool
     {
         if (null === $this->securityChecker) {
             return false;
@@ -40,24 +44,37 @@ class SecurityExtension extends AbstractExtension
             $object = new FieldVote($object, $field);
         }
 
-        return $this->securityChecker->isGranted($role, $object);
+        try {
+            return $this->securityChecker->isGranted($role, $object);
+        } catch (AuthenticationCredentialsNotFoundException) {
+            return false;
+        }
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getFunctions()
+    public function getImpersonateExitUrl(string $exitTo = null): string
     {
-        return array(
-            new TwigFunction('is_granted', array($this, 'isGranted')),
-        );
+        if (null === $this->impersonateUrlGenerator) {
+            return '';
+        }
+
+        return $this->impersonateUrlGenerator->generateExitUrl($exitTo);
     }
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getName()
+    public function getImpersonateExitPath(string $exitTo = null): string
     {
-        return 'security';
+        if (null === $this->impersonateUrlGenerator) {
+            return '';
+        }
+
+        return $this->impersonateUrlGenerator->generateExitPath($exitTo);
+    }
+
+    public function getFunctions(): array
+    {
+        return [
+            new TwigFunction('is_granted', $this->isGranted(...)),
+            new TwigFunction('impersonation_exit_url', $this->getImpersonateExitUrl(...)),
+            new TwigFunction('impersonation_exit_path', $this->getImpersonateExitPath(...)),
+        ];
     }
 }

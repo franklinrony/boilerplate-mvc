@@ -14,7 +14,11 @@ namespace Symfony\Component\HttpFoundation\Tests;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestMatcher;
+use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * @group legacy
+ */
 class RequestMatcherTest extends TestCase
 {
     /**
@@ -32,7 +36,7 @@ class RequestMatcherTest extends TestCase
         $this->assertSame($isMatch, $matcher->matches($request));
     }
 
-    public function getMethodData()
+    public static function getMethodData()
     {
         return [
             ['get', 'get', true],
@@ -46,8 +50,8 @@ class RequestMatcherTest extends TestCase
 
     public function testScheme()
     {
-        $httpRequest = $request = $request = Request::create('');
-        $httpsRequest = $request = $request = Request::create('', 'get', [], [], [], ['HTTPS' => 'on']);
+        $httpRequest = Request::create('');
+        $httpsRequest = Request::create('', 'get', [], [], [], ['HTTPS' => 'on']);
 
         $matcher = new RequestMatcher();
         $matcher->matchScheme('https');
@@ -78,7 +82,22 @@ class RequestMatcherTest extends TestCase
         $this->assertSame($isMatch, $matcher->matches($request));
     }
 
-    public function getHostData()
+    public function testPort()
+    {
+        $matcher = new RequestMatcher();
+        $request = Request::create('', 'get', [], [], [], ['HTTP_HOST' => null, 'SERVER_PORT' => 8000]);
+
+        $matcher->matchPort(8000);
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchPort(9000);
+        $this->assertFalse($matcher->matches($request));
+
+        $matcher = new RequestMatcher(null, null, null, null, [], null, 8000);
+        $this->assertTrue($matcher->matches($request));
+    }
+
+    public static function getHostData()
     {
         return [
             ['.*\.example\.com', true],
@@ -146,6 +165,51 @@ class RequestMatcherTest extends TestCase
         $this->assertTrue($matcher->matches($request));
 
         $matcher->matchAttribute('foo', 'babar');
+        $this->assertFalse($matcher->matches($request));
+    }
+
+    public function testAttributesWithClosure()
+    {
+        $matcher = new RequestMatcher();
+
+        $request = Request::create('/admin/foo');
+        $request->attributes->set('_controller', fn () => new Response('foo'));
+
+        $matcher->matchAttribute('_controller', 'babar');
+        $this->assertFalse($matcher->matches($request));
+    }
+
+    public function testIps()
+    {
+        $matcher = new RequestMatcher();
+
+        $request = Request::create('', 'GET', [], [], [], ['REMOTE_ADDR' => '127.0.0.1']);
+
+        $matcher->matchIp('127.0.0.1');
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchIp('192.168.0.1');
+        $this->assertFalse($matcher->matches($request));
+
+        $matcher->matchIps('127.0.0.1');
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchIps('127.0.0.1, ::1');
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchIps('192.168.0.1, ::1');
+        $this->assertFalse($matcher->matches($request));
+
+        $matcher->matchIps(['127.0.0.1', '::1']);
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchIps(['192.168.0.1', '::1']);
+        $this->assertFalse($matcher->matches($request));
+
+        $matcher->matchIps(['1.1.1.1', '2.2.2.2', '127.0.0.1, ::1']);
+        $this->assertTrue($matcher->matches($request));
+
+        $matcher->matchIps(['1.1.1.1', '2.2.2.2', '192.168.0.1, ::1']);
         $this->assertFalse($matcher->matches($request));
     }
 }

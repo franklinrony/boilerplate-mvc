@@ -19,16 +19,15 @@ use Twig\Node\Expression\FunctionExpression;
 /**
  * @author Bernhard Schussek <bschussek@gmail.com>
  */
-class SearchAndRenderBlockNode extends FunctionExpression
+final class SearchAndRenderBlockNode extends FunctionExpression
 {
-    public function compile(Compiler $compiler)
+    public function compile(Compiler $compiler): void
     {
         $compiler->addDebugInfo($this);
-        $compiler->raw('$this->env->getExtension(\'Symfony\Bridge\Twig\Extension\FormExtension\')->renderer->searchAndRenderBlock(');
+        $compiler->raw('$this->env->getRuntime(\'Symfony\Component\Form\FormRenderer\')->searchAndRenderBlock(');
 
         preg_match('/_([^_]+)$/', $this->getAttribute('name'), $matches);
 
-        $label = null;
         $arguments = iterator_to_array($this->getNode('arguments'));
         $blockNameSuffix = $matches[1];
 
@@ -41,7 +40,7 @@ class SearchAndRenderBlockNode extends FunctionExpression
                     // The "label" function expects the label in the second and
                     // the variables in the third argument
                     $label = $arguments[1];
-                    $variables = isset($arguments[2]) ? $arguments[2] : null;
+                    $variables = $arguments[2] ?? null;
                     $lineno = $label->getTemplateLine();
 
                     if ($label instanceof ConstantExpression) {
@@ -53,7 +52,7 @@ class SearchAndRenderBlockNode extends FunctionExpression
                         // Only insert the label into the array if it is not empty
                         if (!twig_test_empty($label->getAttribute('value'))) {
                             $originalVariables = $variables;
-                            $variables = new ArrayExpression(array(), $lineno);
+                            $variables = new ArrayExpression([], $lineno);
                             $labelKey = new ConstantExpression('label', $lineno);
 
                             if (null !== $originalVariables) {
@@ -100,7 +99,7 @@ class SearchAndRenderBlockNode extends FunctionExpression
                         // If not, add it to the array at runtime.
                         $compiler->raw('(twig_test_empty($_label_ = ');
                         $compiler->subcompile($label);
-                        $compiler->raw(') ? array() : array("label" => $_label_))');
+                        $compiler->raw(') ? [] : ["label" => $_label_])');
                     }
                 }
             }
